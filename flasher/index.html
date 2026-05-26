@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkyPoint Flash Tools</title>
+  <style>
+    :root { color-scheme: light; --ink:#181816; --muted:#6f6b63; --line:#ded9cf; --panel:#fbfaf7; --accent:#2563eb; --good:#15803d; --bad:#b91c1c; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background:#f3f0ea; color:var(--ink); }
+    main { width:min(980px, calc(100% - 32px)); margin:0 auto; padding:34px 0 56px; }
+    header { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:24px; }
+    h1 { margin:0; font-size:clamp(32px, 5vw, 56px); line-height:.95; letter-spacing:0; }
+    h2 { margin:0 0 10px; font-size:22px; }
+    p { line-height:1.55; color:var(--muted); }
+    code { background:#e8e4dc; padding:2px 5px; border-radius:4px; }
+    .status { color:var(--muted); font-size:14px; }
+    .grid { display:grid; grid-template-columns:1.05fr .95fr; gap:18px; align-items:start; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px; box-shadow:0 1px 0 rgba(0,0,0,.03); }
+    .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .choice { border:1px solid var(--line); background:white; color:var(--ink); border-radius:7px; padding:10px 14px; cursor:pointer; font-weight:650; }
+    .choice.active { border-color:var(--accent); outline:2px solid color-mix(in srgb, var(--accent) 18%, transparent); }
+    button, .file-label { border:0; border-radius:7px; padding:11px 14px; font-weight:750; cursor:pointer; }
+    button.primary { background:var(--accent); color:white; }
+    button.secondary { background:#2f2f2d; color:white; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    input[type=file] { display:none; }
+    .file-label { display:inline-flex; background:white; border:1px solid var(--line); color:var(--ink); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .steps { list-style:none; padding:0; margin:12px 0 0; }
+    .steps li { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #ebe7df; color:var(--muted); }
+    .steps li.done { color:var(--good); }
+    .steps li.running { color:var(--ink); font-weight:700; }
+    .steps li.error { color:var(--bad); }
+    .progress-track { width:100%; height:8px; background:#e5e0d7; border-radius:99px; overflow:hidden; margin-top:12px; }
+    .progress-bar { width:0%; height:100%; background:var(--accent); transition:width .2s ease; }
+    .message { margin-top:14px; padding:12px 14px; border-radius:7px; background:white; border:1px solid var(--line); color:var(--muted); }
+    .message.good { border-color:#bbf7d0; background:#f0fdf4; color:#166534; }
+    .message.bad { border-color:#fecaca; background:#fef2f2; color:#991b1b; }
+    .hidden { display:none !important; }
+    footer { margin-top:18px; font-size:13px; color:var(--muted); }
+    @media (max-width:780px) { header { display:block; } .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <main id="flash-tools">
+    <header>
+      <div>
+        <h1>SkyPoint</h1>
+        <p>Private flash bench on elite. Built for loading our own SkyPoint firmware onto X3/X4 readers.</p>
+      </div>
+      <div class="status">Repo: <code>/opt/skypoint/SkyPoint</code><br>Build drop: <code>/var/www/html/skypoint/builds</code></div>
+    </header>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Flash Firmware</h2>
+        <p>Use Chrome or Edge on desktop. Pick the model mostly so the page can give the right restart hint; the flasher validates the partition table before writing.</p>
+
+        <div class="row" aria-label="Device model">
+          <button class="choice active" data-model="x4" type="button">X4</button>
+          <button class="choice" data-model="x3" type="button">X3</button>
+        </div>
+
+        <hr style="border:0;border-top:1px solid var(--line);margin:18px 0">
+
+        <p style="margin-bottom:8px">Choose a local SkyPoint/CrossPoint-compatible <code>firmware.bin</code>:</p>
+        <div class="row">
+          <label class="file-label" for="firmware-input" id="file-label">Choose firmware.bin...</label>
+          <input id="firmware-input" type="file" accept=".bin,application/octet-stream">
+          <button class="primary" id="flash-custom" type="button" disabled>Flash selected file</button>
+        </div>
+
+        <p style="margin:18px 0 8px">Or flash the server build if we have one staged at <code>/skypoint/builds/firmware.bin</code>:</p>
+        <div class="row">
+          <button class="secondary" id="flash-server" type="button" disabled>Flash server firmware.bin</button>
+          <span class="status" id="server-build-status">Checking...</span>
+        </div>
+
+        <div id="browser-warning" class="message bad hidden">WebSerial is not available. Open this page in Chrome or Edge on desktop over HTTPS.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Progress</h2>
+        <p id="progress-title">Idle. Connect the reader by USB, then start a flash.</p>
+        <ul class="steps" id="steps"></ul>
+        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+        <div id="message" class="message">No firmware has been written from this page yet.</div>
+      </div>
+    </section>
+
+    <footer>
+      This page only flashes a selected or locally staged binary. It does not fetch upstream releases or stock firmware. <a href="./README.md">Project notes / roadmap</a>.
+    </footer>
+  </main>
+
+  <script type="module">
+    import { SkyPointFlasher } from './js/flasher.js';
+
+    let deviceModel = 'x4';
+    let customFile = null;
+    let running = false;
+    const serverFirmwareUrl = './builds/firmware.bin';
+
+    const stepsEl = document.getElementById('steps');
+    const barEl = document.getElementById('progress-bar');
+    const msgEl = document.getElementById('message');
+    const titleEl = document.getElementById('progress-title');
+    const flashCustomBtn = document.getElementById('flash-custom');
+    const flashServerBtn = document.getElementById('flash-server');
+    const serverStatus = document.getElementById('server-build-status');
+
+    if (!('serial' in navigator)) document.getElementById('browser-warning').classList.remove('hidden');
+
+    document.querySelectorAll('[data-model]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (running) return;
+        deviceModel = btn.dataset.model;
+        document.querySelectorAll('[data-model]').forEach(b => b.classList.toggle('active', b === btn));
+      });
+    });
+
+    document.getElementById('firmware-input').addEventListener('change', e => {
+      customFile = e.target.files[0] || null;
+      document.getElementById('file-label').textContent = customFile ? customFile.name : 'Choose firmware.bin...';
+      flashCustomBtn.disabled = !customFile || running;
+    });
+
+    async function checkServerBuild() {
+      try {
+        const res = await fetch(serverFirmwareUrl, { method: 'HEAD', cache: 'no-store' });
+        if (!res.ok) throw new Error('missing');
+        const size = Number(res.headers.get('content-length') || 0);
+        serverStatus.textContent = size ? `${(size / 1024 / 1024).toFixed(1)} MB ready` : 'Ready';
+        flashServerBtn.disabled = running;
+      } catch {
+        serverStatus.textContent = 'No local build staged yet';
+        flashServerBtn.disabled = true;
+      }
+    }
+    checkServerBuild();
+
+    function setRunning(value) {
+      running = value;
+      flashCustomBtn.disabled = value || !customFile;
+      checkServerBuild();
+    }
+
+    function renderSteps(states = []) {
+      const names = ['Connect to device', 'Validate partition table', 'Read OTA data', 'Flash firmware', 'Update boot partition', deviceModel === 'x4' ? 'Disconnect' : 'Disconnect / unplug'];
+      stepsEl.innerHTML = names.map((name, i) => `<li class="${states[i] || ''}"><span>${states[i] === 'done' ? 'OK' : states[i] === 'running' ? '...' : states[i] === 'error' ? 'ERR' : '--'}</span><span>${name}</span></li>`).join('');
+    }
+
+    async function runFlash(source) {
+      if (running) return;
+      let port;
+      try {
+        port = await SkyPointFlasher.requestPort();
+      } catch (err) {
+        if (err.name !== 'NotFoundError') showMessage(err.message, 'bad');
+        return;
+      }
+
+      setRunning(true);
+      const states = [];
+      renderSteps(states);
+      barEl.style.width = '0%';
+      msgEl.className = 'message';
+      msgEl.textContent = 'Preparing firmware...';
+
+      try {
+        let firmware;
+        if (source === 'custom') {
+          if (!customFile) throw new Error('No firmware file selected.');
+          titleEl.textContent = `Flashing ${customFile.name}`;
+          firmware = new Uint8Array(await customFile.arrayBuffer());
+        } else {
+          titleEl.textContent = 'Flashing staged server firmware.bin';
+          const res = await fetch(serverFirmwareUrl, { cache: 'no-store' });
+          if (!res.ok) throw new Error('No staged /skypoint/builds/firmware.bin found.');
+          firmware = new Uint8Array(await res.arrayBuffer());
+        }
+
+        msgEl.textContent = 'Writing OTA firmware. Do not unplug until complete.';
+        const flasher = new SkyPointFlasher(port);
+        await flasher.flashFirmware(firmware, {
+          skipReset: true,
+          onStepChange: (idx, _name, status) => {
+            states[idx] = status;
+            renderSteps(states);
+          },
+          onProgress: (_step, current, total) => {
+            if (total) barEl.style.width = `${Math.max(0, Math.min(100, current / total * 100)).toFixed(1)}%`;
+          }
+        });
+
+        titleEl.textContent = 'Flash complete';
+        showMessage(deviceModel === 'x4' ? 'Flash complete. Replug/restart the device if it does not reboot itself.' : 'Flash complete. Unplug and replug the USB cable to restart.', 'good');
+      } catch (err) {
+        titleEl.textContent = 'Flash failed';
+        showMessage(err.message || String(err), 'bad');
+      } finally {
+        setRunning(false);
+      }
+    }
+
+    function showMessage(text, type) {
+      msgEl.className = `message ${type || ''}`;
+      msgEl.textContent = text;
+    }
+
+    flashCustomBtn.addEventListener('click', () => runFlash('custom'));
+    flashServerBtn.addEventListener('click', () => runFlash('server'));
+  </script>
+</body>
+</html>

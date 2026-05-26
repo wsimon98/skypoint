@@ -17,6 +17,7 @@ class EpubReaderMenuActivity final : public Activity {
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
+    DARK_MODE,
     SCREENSHOT,
     DISPLAY_QR,
     GO_HOME,
@@ -26,7 +27,8 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes);
+                                  const uint8_t currentOrientation, const bool hasFootnotes,
+                                  const uint8_t currentDarkOverride);
 
   void onEnter() override;
   void onExit() override;
@@ -53,6 +55,10 @@ class EpubReaderMenuActivity final : public Activity {
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
+  // SkyPoint per-book dark-mode override, 0=USE_SYSTEM 1=FORCE_ON 2=FORCE_OFF
+  uint8_t pendingDarkOverride = 0;
+  const std::vector<StrId> darkOverrideLabels = {StrId::STR_DARK_MODE_SYSTEM, StrId::STR_DARK_MODE_ON,
+                                                 StrId::STR_DARK_MODE_OFF};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

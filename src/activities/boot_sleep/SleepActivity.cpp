@@ -15,6 +15,8 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "images/SkyPointSleepX3.h"
+#include "images/SkyPointSleepX4.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -150,20 +152,65 @@ void SleepActivity::renderCustomSleepScreen() const {
 }
 
 void SleepActivity::renderDefaultSleepScreen() const {
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  // Sleep manages its own invert via SETTINGS.sleepScreen, so disable any inherited
+  // renderer dark-mode for the duration of this render to avoid double-inverting
+  // when the user has reader dark-mode enabled on home / in a book.
+  const bool wasDark = renderer.isDarkMode();
+  renderer.setDarkMode(false);
+
+  // Pick the SkyPoint wolf that matches this device's PANEL-NATIVE dimensions.
+  // Bitmaps are encoded landscape (rotated 90° CCW from the upright source PNG)
+  // so they can be drawn straight to the framebuffer at panel native coords.
+  const auto savedOrientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+  const int panelWidth = renderer.getScreenWidth();
+  const int panelHeight = renderer.getScreenHeight();
+  renderer.setOrientation(savedOrientation);
+
+  const uint8_t* sleepImage = nullptr;
+  uint16_t imgW = 0;
+  uint16_t imgH = 0;
+  if (panelWidth == SkyPointSleepX4_WIDTH && panelHeight == SkyPointSleepX4_HEIGHT) {
+    sleepImage = SkyPointSleepX4;
+    imgW = SkyPointSleepX4_WIDTH;
+    imgH = SkyPointSleepX4_HEIGHT;
+  } else if (panelWidth == SkyPointSleepX3_WIDTH && panelHeight == SkyPointSleepX3_HEIGHT) {
+    sleepImage = SkyPointSleepX3;
+    imgW = SkyPointSleepX3_WIDTH;
+    imgH = SkyPointSleepX3_HEIGHT;
+  }
 
   renderer.clearScreen();
-  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
 
-  // Make sleep screen dark unless light is selected in settings
+  if (sleepImage) {
+    // Draw the full-screen wolf in landscape orientation so the bytes land at
+    // panel (0,0) without the Portrait rotateCoordinates offset pushing the
+    // origin off-screen. Then switch back to Portrait for the text below.
+    renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+    renderer.drawImage(sleepImage, 0, 0, imgW, imgH);
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    const int pageHeight = renderer.getScreenHeight();
+    const int textY1 = static_cast<int>(pageHeight * 0.62f);
+    const int textY2 = textY1 + 32;
+    renderer.drawCenteredText(UI_10_FONT_ID, textY1, "SkyPoint", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(SMALL_FONT_ID, textY2, tr(STR_SLEEPING));
+  } else {
+    const int pageWidth = renderer.getScreenWidth();
+    const int pageHeight = renderer.getScreenHeight();
+    renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, "SkyPoint", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+  }
+
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
     renderer.invertScreen();
   }
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+
+  // Restore for whatever activity resumes after we wake — keeps home/reader dark
+  // mode intact across sleep cycles.
+  renderer.setDarkMode(wasDark);
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {

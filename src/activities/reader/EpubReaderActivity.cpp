@@ -26,6 +26,7 @@
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "ReaderDarkMode.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -160,6 +161,10 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
+  // SkyPoint dark mode: apply the effective value (per-book override falls back
+  // to the system setting). Cleared in onExit so other activities are unaffected.
+  renderer.setDarkMode(ReaderDarkMode::effectiveForBook(epub->getCachePath()));
+
   // Trigger first update
   requestUpdate();
 }
@@ -169,6 +174,8 @@ void EpubReaderActivity::onExit() {
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  // SkyPoint dark mode: clear so home/sleep/system UI render normally.
+  renderer.setDarkMode(false);
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -256,14 +263,24 @@ void EpubReaderActivity::loop() {
       bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
     }
     const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+    const uint8_t currentDarkOverride =
+        static_cast<uint8_t>(ReaderDarkMode::loadBookOverride(epub->getCachePath()));
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                               SETTINGS.orientation, !currentPageFootnotes.empty()),
+                               SETTINGS.orientation, !currentPageFootnotes.empty(), currentDarkOverride),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
                              applyOrientation(menu.orientation);
                              toggleAutoPageTurn(menu.pageTurnOption);
+                             // SkyPoint: persist + apply the per-book dark mode override the menu
+                             // cycled through. Effective value is recomputed against the (possibly
+                             // updated) override so the next page render reflects the choice.
+                             if (epub) {
+                               const auto override = static_cast<ReaderDarkMode::BookOverride>(menu.darkOverride);
+                               ReaderDarkMode::saveBookOverride(epub->getCachePath(), override);
+                               renderer.setDarkMode(ReaderDarkMode::effective(override));
+                             }
                              if (!result.isCancelled) {
                                onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
                              }
@@ -562,6 +579,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::DARK_MODE:
+    case EpubReaderMenuActivity::MenuAction::ROTATE_SCREEN:
+    case EpubReaderMenuActivity::MenuAction::AUTO_PAGE_TURN:
+      // These three are cycled in-place inside the menu; the reader applies the
+      // result via the menu's lambda regardless of whether the menu was confirmed
+      // or cancelled. Nothing further to do here.
+      break;
   }
 }
 

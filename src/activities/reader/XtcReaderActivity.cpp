@@ -17,6 +17,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "ReaderDarkMode.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
@@ -40,12 +41,17 @@ void XtcReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
 
+  // SkyPoint dark mode for XTC books.
+  renderer.setDarkMode(ReaderDarkMode::effectiveForBook(xtc->getCachePath()));
+
   // Trigger first update
   requestUpdate();
 }
 
 void XtcReaderActivity::onExit() {
   Activity::onExit();
+
+  renderer.setDarkMode(false);
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
