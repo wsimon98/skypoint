@@ -44,6 +44,7 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  mutable bool darkMode = false;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -130,6 +131,13 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+
+  // SkyPoint dark mode: when true, displayBuffer() inverts the framebuffer once
+  // (XOR-flip every byte) before flushing to the e-ink panel. Each render() is
+  // expected to clearScreen() and rebuild the framebuffer, so the in-place
+  // invert does not accumulate across frames.
+  void setDarkMode(const bool enabled) const { darkMode = enabled; }
+  bool isDarkMode() const { return darkMode; }
 
   // Screen ops
   int getScreenWidth() const;

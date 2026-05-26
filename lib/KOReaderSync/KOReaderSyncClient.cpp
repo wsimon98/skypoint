@@ -13,7 +13,7 @@ int KOReaderSyncClient::lastHttpCode = 0;
 
 namespace {
 // Device identifier for CrossPoint reader
-constexpr char DEVICE_NAME[] = "CrossPoint";
+constexpr char DEVICE_NAME[] = "SkyPoint";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
 
 // KOSync's TLS-1.3 servers can't be reached through the precompiled system

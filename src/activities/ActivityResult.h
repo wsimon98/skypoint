@@ -21,6 +21,9 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
+  // SkyPoint: per-book dark mode override carried back from the reader menu.
+  // 0 = use system, 1 = force on, 2 = force off. See ReaderDarkMode::BookOverride.
+  uint8_t darkOverride = 0;
 };
 
 struct ChapterResult {

@@ -12,6 +12,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ProgressFile.h"
+#include "ReaderDarkMode.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -42,6 +43,10 @@ void TxtReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(filePath, fileName, "", "");
 
+  // SkyPoint dark mode (system-wide for TXT; per-book overrides honored via shared
+  // darkmode.bin sidecar next to progress.bin in the txt cache dir).
+  renderer.setDarkMode(ReaderDarkMode::effectiveForBook(txt->getCachePath()));
+
   // Trigger first update
   requestUpdate();
 }
@@ -51,6 +56,7 @@ void TxtReaderActivity::onExit() {
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  renderer.setDarkMode(false);
 
   pageOffsets.clear();
   currentPageLines.clear();

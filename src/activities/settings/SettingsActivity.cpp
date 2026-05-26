@@ -102,6 +102,9 @@ void SettingsActivity::onEnter() {
 
   rebuildSettingsLists();
 
+  // SkyPoint: settings screen honors the system dark-mode toggle.
+  renderer.setDarkMode(SETTINGS.readerDarkMode != 0);
+
   // Trigger first update
   requestUpdate();
 }
@@ -109,6 +112,7 @@ void SettingsActivity::onEnter() {
 void SettingsActivity::onExit() {
   Activity::onExit();
 
+  renderer.setDarkMode(false);
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
 
@@ -351,6 +355,8 @@ void SettingsActivity::openSleepTimeoutPicker() {
 void SettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
+  // Re-apply dark mode each frame so toggling it in-place flips immediately.
+  renderer.setDarkMode(SETTINGS.readerDarkMode != 0);
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

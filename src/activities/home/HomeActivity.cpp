@@ -119,12 +119,18 @@ void HomeActivity::onEnter() {
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
 
+  // SkyPoint: home screen honors the system reader dark-mode toggle. Cleared on exit
+  // so other top-level screens (settings, file browser, etc.) render normally.
+  renderer.setDarkMode(SETTINGS.readerDarkMode != 0);
+
   // Trigger first update
   requestUpdate();
 }
 
 void HomeActivity::onExit() {
   Activity::onExit();
+
+  renderer.setDarkMode(false);
 
   // Free the stored cover buffer if any
   freeCoverBuffer();
@@ -219,6 +225,10 @@ void HomeActivity::loop() {
 }
 
 void HomeActivity::render(RenderLock&&) {
+  // Re-apply each frame so toggling the system dark-mode in Settings flips
+  // the home screen immediately on return.
+  renderer.setDarkMode(SETTINGS.readerDarkMode != 0);
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
