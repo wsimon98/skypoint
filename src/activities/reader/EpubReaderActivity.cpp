@@ -31,6 +31,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/FolderProfile.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -119,6 +120,11 @@ void EpubReaderActivity::onEnter() {
     return;
   }
 
+  // SkyPoint per-folder profile: apply the nearest folder profile (if any) so the
+  // overrides are in effect for every SETTINGS read during this reading session.
+  // Restored in onExit().
+  FolderProfile::apply(epub->getPath());
+
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
@@ -171,6 +177,9 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  // SkyPoint per-folder profile: restore SETTINGS to pre-overlay values.
+  FolderProfile::restore();
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);

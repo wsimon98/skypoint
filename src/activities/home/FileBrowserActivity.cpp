@@ -11,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/FolderActionsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -228,12 +229,14 @@ void FileBrowserActivity::loop() {
     }
 
     if (mode == Mode::Books && mappedInput.getHeldTime() >= GO_HOME_MS) {
-      // --- LONG PRESS ACTION: DELETE FILE OR DIRECTORY ---
+      // --- LONG PRESS ACTION ---
+      // Files: prompt to delete. Directories: open FolderActionsActivity (save/clear
+      // folder profile, or delete folder).
       std::string cleanBasePath = basepath;
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
       const std::string fullPath = cleanBasePath + entry;
 
-      auto handler = [this, fullPath](const ActivityResult& res) {
+      auto deleteHandler = [this, fullPath](const ActivityResult& res) {
         if (!res.isCancelled) {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           if (removeDirFile(fullPath)) {
@@ -255,9 +258,33 @@ void FileBrowserActivity::loop() {
         }
       };
 
-      std::string heading = tr(STR_DELETE) + std::string("? ");
+      if (isDirectory) {
+        // Strip trailing slash for display, keep folderPath without trailing slash for FolderProfile.
+        std::string folderPath = fullPath;
+        if (!folderPath.empty() && folderPath.back() == '/') folderPath.pop_back();
+        std::string displayName = entry;
+        if (!displayName.empty() && displayName.back() == '/') displayName.pop_back();
 
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+        auto folderHandler = [this, folderPath, displayName, deleteHandler](const ActivityResult& res) {
+          if (res.isCancelled) return;
+          const auto* menu = std::get_if<MenuResult>(&res.data);
+          if (!menu) return;
+          if (menu->action == FolderActionsActivity::DELETE_REQUESTED) {
+            std::string heading = tr(STR_DELETE) + std::string("? ");
+            startActivityForResult(
+                std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, displayName), deleteHandler);
+          }
+          // SAVED / CLEARED: no list refresh needed (sidecar is hidden).
+        };
+
+        startActivityForResult(
+            std::make_unique<FolderActionsActivity>(renderer, mappedInput, folderPath, displayName), folderHandler);
+        return;
+      }
+
+      std::string heading = tr(STR_DELETE) + std::string("? ");
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry),
+                             deleteHandler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
