@@ -37,7 +37,6 @@ Both scripts install [PlatformIO](https://platformio.org/) via `pipx` (installin
 - **Per-folder reading profiles** — drop a `.skypoint-folder.bin` sidecar in any folder on the SD card and SkyPoint applies that folder's settings overrides (font family/size, line spacing, paragraph alignment, screen margin, dark mode, hyphenation, focus reading) for every book in or under it. The nearest sidecar wins. Configure from the file browser: long-press a folder → **Save Folder Profile** captures your current reader settings, **Clear Folder Profile** removes the sidecar. See [Per-folder profiles](#per-folder-profiles) below.
 - **SkyPoint UI theme** as the default for fresh installs: three recent-book covers across the top, a 2-column tile-grid main menu, "SkyPoint" wordmark in the header.
 - **SkyPoint boot splash and sleep screen** — fox logo on boot, full-screen wolf on sleep. Auto-selects between X3 (528×792) and X4 (480×800) panels.
-- **Rebranded user-facing text** (`CrossPoint` → `SkyPoint`) without touching the on-disk `/.crosspoint` cache paths or the KOReader sync `DEVICE_ID`, both of which would break existing data if renamed.
 
 The on-disk format and partition layout are unchanged from CrossPoint, so flashing SkyPoint over a stock CrossPoint install (or vice versa) preserves your books, reading positions, settings, and Wi-Fi credentials.
 
