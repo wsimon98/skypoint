@@ -24,6 +24,7 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/FolderProfile.h"
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -31,6 +32,9 @@ void XtcReaderActivity::onEnter() {
   if (!xtc) {
     return;
   }
+
+  // SkyPoint per-folder profile: apply for the duration of this reading session.
+  FolderProfile::apply(xtc->getPath());
 
   xtc->setupCacheDir();
 
@@ -51,6 +55,9 @@ void XtcReaderActivity::onEnter() {
 
 void XtcReaderActivity::onExit() {
   Activity::onExit();
+
+  // SkyPoint per-folder profile: restore SETTINGS to pre-overlay values.
+  FolderProfile::restore();
 
   renderer.setDarkMode(false);
 

@@ -17,6 +17,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/FolderProfile.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -31,6 +32,9 @@ void TxtReaderActivity::onEnter() {
   if (!txt) {
     return;
   }
+
+  // SkyPoint per-folder profile: apply for the duration of this reading session.
+  FolderProfile::apply(txt->getPath());
 
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
@@ -53,6 +57,9 @@ void TxtReaderActivity::onEnter() {
 
 void TxtReaderActivity::onExit() {
   Activity::onExit();
+
+  // SkyPoint per-folder profile: restore SETTINGS to pre-overlay values.
+  FolderProfile::restore();
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
