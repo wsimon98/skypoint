@@ -25,6 +25,8 @@
 #include "fontIds.h"
 #include "util/FolderProfile.h"
 
+static constexpr int kXtcLandscapeSections = 3;
+
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -48,6 +50,10 @@ void XtcReaderActivity::onEnter() {
   // SkyPoint dark mode for XTC books.
   renderer.setDarkMode(ReaderDarkMode::effectiveForBook(xtc->getCachePath()));
 
+  // Apply the saved reading orientation: portrait = whole page, landscape = zoomed sections.
+  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+  currentSection = 0;
+
   // Trigger first update
   requestUpdate();
 }
@@ -59,6 +65,9 @@ void XtcReaderActivity::onExit() {
   FolderProfile::restore();
 
   renderer.setDarkMode(false);
+
+  // Restore portrait so the rest of the UI is not left rotated.
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -108,21 +117,53 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP &&
-                         mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
+  const bool longPress = !fromTilt && mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
+
+  // Long-press to rotate, exactly like the EPUB reader (needs the "long-press = change
+  // orientation" control setting). Portrait shows the whole page; landscape shows the page
+  // as kXtcLandscapeSections zoomed horizontal bands.
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
+    const uint8_t newOrientation =
+        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
+                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
+    if (newOrientation != SETTINGS.orientation) {
+      SETTINGS.orientation = newOrientation;
+      SETTINGS.saveToFile();
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      currentSection = 0;
+    }
+    requestUpdate();
+    return;
+  }
+
+  const bool landscape = (SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CW ||
+                          SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW);
+  const int sections = landscape ? kXtcLandscapeSections : 1;
+
+  const bool skipPages =
+      !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && longPress;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
-    if (currentPage >= static_cast<uint32_t>(skipAmount)) {
+    if (sections > 1 && currentSection > 0 && skipAmount == 1) {
+      currentSection--;
+    } else if (currentPage >= static_cast<uint32_t>(skipAmount)) {
       currentPage -= skipAmount;
+      currentSection = sections - 1;
     } else {
       currentPage = 0;
+      currentSection = 0;
     }
     requestUpdate();
   } else if (nextTriggered) {
-    currentPage += skipAmount;
-    if (currentPage >= xtc->getPageCount()) {
-      currentPage = xtc->getPageCount();  // Allow showing "End of book"
+    if (sections > 1 && currentSection < sections - 1 && skipAmount == 1) {
+      currentSection++;
+    } else {
+      currentPage += skipAmount;
+      currentSection = 0;
+      if (currentPage >= xtc->getPageCount()) {
+        currentPage = xtc->getPageCount();  // Allow showing "End of book"
+      }
     }
     requestUpdate();
   }
@@ -217,13 +258,32 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
 }
 
 void XtcReaderActivity::renderPage() {
-  const uint16_t pageWidth = xtc->getPageWidth();
-  const uint16_t pageHeight = xtc->getPageHeight();
+  const uint16_t srcPageW = xtc->getPageWidth();
+  const uint16_t srcPageH = xtc->getPageHeight();
   const uint8_t bitDepth = xtc->getBitDepth();
 
-  // Calculate buffer size for one page
-  // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
+  // Render into a window the size of the (possibly rotated) logical screen.
+  // Portrait: the whole page. Landscape: one of kXtcLandscapeSections horizontal bands,
+  // zoomed to fill the screen. loadPageRegion scales straight from the stored hi-res page,
+  // so only one screen-sized window is ever held in RAM regardless of stored page size.
+  const uint16_t pageWidth = static_cast<uint16_t>(renderer.getScreenWidth());
+  const uint16_t pageHeight = static_cast<uint16_t>(renderer.getScreenHeight());
+
+  const bool landscape = (SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CW ||
+                          SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW);
+  const int sections = landscape ? kXtcLandscapeSections : 1;
+  int section = currentSection;
+  if (section < 0) section = 0;
+  if (section >= sections) section = sections - 1;
+
+  uint16_t srcX0 = 0, srcY0 = 0, srcW = srcPageW, srcH = srcPageH;
+  if (landscape) {
+    const uint32_t y0 = static_cast<uint32_t>(section) * srcPageH / sections;
+    const uint32_t y1 = static_cast<uint32_t>(section + 1) * srcPageH / sections;
+    srcY0 = static_cast<uint16_t>(y0);
+    srcH = static_cast<uint16_t>(y1 - y0);
+  }
+
   size_t pageBufferSize;
   if (bitDepth == 2) {
     pageBufferSize = ((static_cast<size_t>(pageWidth) * pageHeight + 7) / 8) * 2;
@@ -231,7 +291,6 @@ void XtcReaderActivity::renderPage() {
     pageBufferSize = ((pageWidth + 7) / 8) * pageHeight;
   }
 
-  // Allocate page buffer
   uint8_t* pageBuffer = static_cast<uint8_t*>(malloc(pageBufferSize));
   if (!pageBuffer) {
     LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
@@ -241,11 +300,11 @@ void XtcReaderActivity::renderPage() {
     return;
   }
 
-  // Load page data
-  size_t bytesRead = xtc->loadPage(currentPage, pageBuffer, pageBufferSize);
+  size_t bytesRead =
+      xtc->loadPageRegion(currentPage, srcX0, srcY0, srcW, srcH, pageWidth, pageHeight, pageBuffer, pageBufferSize);
   if (bytesRead == 0) {
-    LOG_ERR("XTR", "Failed to load page %lu: bufferSize=%lu bitDepth=%u error=%s", currentPage, pageBufferSize,
-            bitDepth, xtc::errorToString(xtc->getLastError()));
+    LOG_ERR("XTR", "Failed to load page region %lu: bufferSize=%lu bitDepth=%u error=%s", currentPage,
+            pageBufferSize, bitDepth, xtc::errorToString(xtc->getLastError()));
     free(pageBuffer);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
@@ -257,7 +316,6 @@ void XtcReaderActivity::renderPage() {
   renderer.clearScreen();
 
   // Copy page bitmap using GfxRenderer's drawPixel
-  // XTC/XTCH pages are pre-rendered with status bar included, so render full page
   const uint16_t maxSrcY = pageHeight;
 
   if (bitDepth == 2) {
@@ -306,7 +364,11 @@ void XtcReaderActivity::renderPage() {
       }
     }
 
-    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+    // Comics are heavy-ink grayscale; lay the BW base with a clearing full
+    // refresh on every turn so the previous page/band can't ghost through the
+    // grayscale overlay below. (The 15-page FAST_REFRESH cycle ghosts badly here.)
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
 
     // Pass 2: LSB buffer - mark DARK gray only (XTH value 1)
     // In LUT: 0 bit = apply gray effect, 1 bit = untouched

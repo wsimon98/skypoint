@@ -515,6 +515,15 @@ size_t Xtc::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) con
   return const_cast<xtc::XtcParser*>(parser.get())->loadPage(pageIndex, buffer, bufferSize);
 }
 
+size_t Xtc::loadPageRegion(uint32_t pageIndex, uint16_t srcX0, uint16_t srcY0, uint16_t srcW, uint16_t srcH,
+                           uint16_t destW, uint16_t destH, uint8_t* destBuf, size_t destBufSize) const {
+  if (!loaded || !parser) {
+    return 0;
+  }
+  return const_cast<xtc::XtcParser*>(parser.get())
+      ->loadPageRegion(pageIndex, srcX0, srcY0, srcW, srcH, destW, destH, destBuf, destBufSize);
+}
+
 xtc::XtcError Xtc::loadPageStreaming(uint32_t pageIndex,
                                      std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                      size_t chunkSize) const {
