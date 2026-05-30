@@ -90,6 +90,12 @@ class Xtc {
    * @param chunkSize Chunk size
    * @return Error code
    */
+  /**
+   * Load a scaled window of a page region into a packed buffer (see XtcParser::loadPageRegion).
+   */
+  size_t loadPageRegion(uint32_t pageIndex, uint16_t srcX0, uint16_t srcY0, uint16_t srcW, uint16_t srcH,
+                        uint16_t destW, uint16_t destH, uint8_t* destBuf, size_t destBufSize) const;
+
   xtc::XtcError loadPageStreaming(uint32_t pageIndex,
                                   std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                   size_t chunkSize = 1024) const;

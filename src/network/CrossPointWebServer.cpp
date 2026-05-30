@@ -25,6 +25,9 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "html/js/converterJs.generated.h"
+#include "html/js/unrarBundleJs.generated.h"
+#include "html/js/unrarWasm.generated.h"
 #include "util/BookCacheUtils.h"
 
 namespace {
@@ -142,6 +145,9 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/js/converter.js", HTTP_GET, [this] { handleConverterJs(); });
+  server->on("/js/unrarBundle.js", HTTP_GET, [this] { handleUnrarBundleJs(); });
+  server->on("/js/unrar.wasm", HTTP_GET, [this] { handleUnrarWasm(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -355,6 +361,24 @@ void CrossPointWebServer::handleJszip() const {
   server->sendHeader("Content-Encoding", "gzip");
   server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
+}
+
+void CrossPointWebServer::handleConverterJs() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "application/javascript", converterJs, converterJsCompressedSize);
+  LOG_DBG("WEB", "Served converter.js");
+}
+
+void CrossPointWebServer::handleUnrarBundleJs() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "application/javascript", unrarBundleJs, unrarBundleJsCompressedSize);
+  LOG_DBG("WEB", "Served unrarBundle.js");
+}
+
+void CrossPointWebServer::handleUnrarWasm() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "application/wasm", unrarWasm, unrarWasmCompressedSize);
+  LOG_DBG("WEB", "Served unrar.wasm");
 }
 
 void CrossPointWebServer::handleNotFound() const {

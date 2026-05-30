@@ -66,6 +66,16 @@ class XtcParser {
    * @param chunkSize Chunk size (default: 1024 bytes)
    * @return Error code
    */
+  /**
+   * Load a downscaled/upscaled window of a page into a packed buffer that matches
+   * the on-disk layout (XTH column-major / XTG row-major) at the window dimensions,
+   * so the reader can render it like a normal page. Sequential forward reads only
+   * (RAM = one source line + the window). Source region is in stored-page pixels.
+   * @return packed window byte count on success, 0 on failure.
+   */
+  size_t loadPageRegion(uint32_t pageIndex, uint16_t srcX0, uint16_t srcY0, uint16_t srcW, uint16_t srcH,
+                        uint16_t destW, uint16_t destH, uint8_t* destBuf, size_t destBufSize);
+
   XtcError loadPageStreaming(uint32_t pageIndex,
                              std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                              size_t chunkSize = 1024);

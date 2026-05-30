@@ -19,6 +19,7 @@ class XtcReaderActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;
+  int currentSection = 0;  // landscape: which horizontal band (0..sections-1)
   int pagesUntilFullRefresh = 0;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;

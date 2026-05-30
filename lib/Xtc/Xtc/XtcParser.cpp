@@ -467,6 +467,139 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
   return bytesRead;
 }
 
+size_t XtcParser::loadPageRegion(uint32_t pageIndex, uint16_t srcX0, uint16_t srcY0, uint16_t srcW,
+                                 uint16_t srcH, uint16_t destW, uint16_t destH, uint8_t* destBuf,
+                                 size_t destBufSize) {
+  if (!m_isOpen) {
+    m_lastError = XtcError::FILE_NOT_FOUND;
+    return 0;
+  }
+  if (pageIndex >= m_header.pageCount || destW == 0 || destH == 0 || srcW == 0 || srcH == 0) {
+    m_lastError = XtcError::PAGE_OUT_OF_RANGE;
+    return 0;
+  }
+
+  PageInfo page;
+  if (!readPageTableEntry(pageIndex, page)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+  if (!ensureFileOpen() || !m_file.seek64(page.offset)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+
+  XtgPageHeader pageHeader;
+  if (m_file.read(reinterpret_cast<uint8_t*>(&pageHeader), sizeof(XtgPageHeader)) != sizeof(XtgPageHeader)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+  const uint32_t expectedMagic = (m_bitDepth == 2) ? XTH_MAGIC : XTG_MAGIC;
+  if (pageHeader.magic != expectedMagic) {
+    m_lastError = XtcError::INVALID_MAGIC;
+    return 0;
+  }
+
+  const uint16_t pw = pageHeader.width;
+  const uint16_t pheight = pageHeader.height;
+  if (srcX0 >= pw || srcY0 >= pheight) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+  if (static_cast<uint32_t>(srcX0) + srcW > pw) srcW = pw - srcX0;
+  if (static_cast<uint32_t>(srcY0) + srcH > pheight) srcH = pheight - srcY0;
+
+  const uint64_t bitmapStart = page.offset + sizeof(XtgPageHeader);
+
+  if (m_bitDepth == 2) {
+    const size_t planeSizeSrc = (static_cast<size_t>(pw) * pheight + 7) / 8;
+    const size_t colBytesSrc = (static_cast<size_t>(pheight) + 7) / 8;
+    const size_t planeSizeDst = (static_cast<size_t>(destW) * destH + 7) / 8;
+    const size_t colBytesDst = (static_cast<size_t>(destH) + 7) / 8;
+    const size_t outSize = planeSizeDst * 2;
+    if (destBufSize < outSize) {
+      m_lastError = XtcError::MEMORY_ERROR;
+      return 0;
+    }
+    memset(destBuf, 0, outSize);
+    std::vector<uint8_t> colbuf(colBytesSrc);
+
+    for (int plane = 0; plane < 2; plane++) {
+      const uint64_t planeStart = bitmapStart + static_cast<uint64_t>(plane) * planeSizeSrc;
+      if (!m_file.seek64(planeStart)) {
+        m_lastError = XtcError::READ_ERROR;
+        return 0;
+      }
+      uint8_t* destPlane = destBuf + static_cast<size_t>(plane) * planeSizeDst;
+
+      for (uint32_t colIndex = 0; colIndex < pw; colIndex++) {
+        if (m_file.read(colbuf.data(), colBytesSrc) != colBytesSrc) {
+          m_lastError = XtcError::READ_ERROR;
+          return 0;
+        }
+        const uint32_t srcX = static_cast<uint32_t>(pw) - 1 - colIndex;
+        if (srcX < srcX0 || srcX >= static_cast<uint32_t>(srcX0) + srcW) continue;
+        const uint32_t k = srcX - srcX0;
+        // dest columns owned by this source column: [dxLo, dxHiExcl)
+        uint32_t dxLo = (k * destW + srcW - 1) / srcW;
+        uint32_t dxHiExcl = ((k + 1) * destW + srcW - 1) / srcW;
+        if (dxHiExcl > destW) dxHiExcl = destW;
+        for (uint32_t dx = dxLo; dx < dxHiExcl; dx++) {
+          const size_t destColIndex = destW - 1 - dx;
+          for (uint32_t dy = 0; dy < destH; dy++) {
+            const uint32_t srcY = srcY0 + dy * srcH / destH;
+            if (srcY >= pheight) continue;
+            if ((colbuf[srcY >> 3] >> (7 - (srcY & 7))) & 1) {
+              destPlane[destColIndex * colBytesDst + (dy >> 3)] |= (1 << (7 - (dy & 7)));
+            }
+          }
+        }
+      }
+    }
+    m_lastError = XtcError::OK;
+    return outSize;
+  }
+
+  // 1-bit XTG, row-major
+  const size_t rowBytesSrc = (static_cast<size_t>(pw) + 7) / 8;
+  const size_t rowBytesDst = (static_cast<size_t>(destW) + 7) / 8;
+  const size_t outSize = rowBytesDst * destH;
+  if (destBufSize < outSize) {
+    m_lastError = XtcError::MEMORY_ERROR;
+    return 0;
+  }
+  memset(destBuf, 0, outSize);
+  if (!m_file.seek64(bitmapStart)) {
+    m_lastError = XtcError::READ_ERROR;
+    return 0;
+  }
+  std::vector<uint8_t> rowbuf(rowBytesSrc);
+
+  for (uint32_t srcY = 0; srcY < pheight; srcY++) {
+    if (m_file.read(rowbuf.data(), rowBytesSrc) != rowBytesSrc) {
+      m_lastError = XtcError::READ_ERROR;
+      return 0;
+    }
+    if (srcY < srcY0 || srcY >= static_cast<uint32_t>(srcY0) + srcH) continue;
+    const uint32_t k = srcY - srcY0;
+    uint32_t dyLo = (k * destH + srcH - 1) / srcH;
+    uint32_t dyHiExcl = ((k + 1) * destH + srcH - 1) / srcH;
+    if (dyHiExcl > destH) dyHiExcl = destH;
+    for (uint32_t dy = dyLo; dy < dyHiExcl; dy++) {
+      uint8_t* destRow = destBuf + static_cast<size_t>(dy) * rowBytesDst;
+      for (uint32_t dx = 0; dx < destW; dx++) {
+        const uint32_t srcX = srcX0 + dx * srcW / destW;
+        if (srcX >= pw) continue;
+        if ((rowbuf[srcX >> 3] >> (7 - (srcX & 7))) & 1) {
+          destRow[dx >> 3] |= (1 << (7 - (dx & 7)));
+        }
+      }
+    }
+  }
+  m_lastError = XtcError::OK;
+  return outSize;
+}
+
 XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
                                       std::function<void(const uint8_t* data, size_t size, size_t offset)> callback,
                                       size_t chunkSize) {

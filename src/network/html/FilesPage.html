@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SkyPoint - Files</title>
   <script src="/js/jszip.min.js"></script>
+  <script src="/js/converter.js"></script>
+  <script src="/js/unrarBundle.js"></script>
   <style>
     :root {
       --font-color: #333;
@@ -1559,8 +1561,36 @@
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <div class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" onchange="validateFile()" multiple>
+        <input type="file" id="fileInput" onchange="validateFile(); updateXtcOptionVisibility();" multiple>
         <p class="drop-zone-hint">⬇ Drop files here — or click to browse</p>
+      </div>
+      <div class="convert-options" id="xtcOptions" style="display:none;">
+        <label class="convert-checkbox">
+          <input type="checkbox" id="convertToXtc" onchange="toggleXtcOptions()">
+          <span>&#128218; Make comic (.xtc)</span>
+        </label>
+        <div id="xtcSettings" style="display:none; margin-top:8px; font-size:0.9em;">
+          <label>Quality:
+            <select id="xtcQuality">
+              <option value="grayscale" selected>Grayscale (4-level)</option>
+              <option value="bw">B&amp;W (1-bit, smaller)</option>
+            </select>
+          </label>
+          <label style="margin-left:10px"><input type="checkbox" id="xtcDetail" checked> Sharp zoom (larger files)</label>
+          <div style="margin-top:6px"></div>
+          <label>Dithering:
+            <select id="xtcDither">
+              <option value="floyd" selected>Floyd-Steinberg</option>
+              <option value="atkinson">Atkinson</option>
+              <option value="sierra-lite">Sierra Lite</option>
+              <option value="ordered">Ordered</option>
+              <option value="none">None (threshold)</option>
+            </select>
+          </label>
+          <label style="margin-left:10px"><input type="checkbox" id="xtcSplitWide"> Split wide pages</label>
+          <label style="margin-left:10px"><input type="checkbox" id="xtcManga"> Manga order (R&rarr;L)</label>
+          <div style="margin-top:6px;color:#888">Converts images / CBZ / CBR to a comic file the reader can open. Grayscale looks best. Sharp zoom stores extra detail so you can rotate the reader (long-press, like a book) and read each page in 3 big landscape sections. Output: one .xtc per CBZ/CBR; selected images become one .xtc.</div>
+        </div>
       </div>
       <div class="picker-columns" id="pickerColumns">
         <div class="convert-options" id="convertOptions" style="display:none;">
@@ -3213,6 +3243,7 @@
         fileInput.files = dt.files;
 
         validateFile();
+        updateXtcOptionVisibility();
       });
     }
   })();
@@ -5400,9 +5431,128 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
   });
 }
 
+function updateXtcOptionVisibility() {
+  var fileInput = document.getElementById('fileInput');
+  var files = fileInput ? Array.prototype.slice.call(fileInput.files) : [];
+  var xtcOptions = document.getElementById('xtcOptions');
+  if (!xtcOptions) return;
+  var isConv = function(n){ return /\.(cbz|cbr|zip|jpe?g|png|webp|gif|bmp|avif)$/i.test(n); };
+  var hasConvertible = files.length > 0 && files.some(function(f){ return isConv(f.name); });
+  if (hasConvertible) {
+    xtcOptions.style.display = 'block';
+  } else {
+    xtcOptions.style.display = 'none';
+    var box = document.getElementById('convertToXtc');
+    if (box) box.checked = false;
+    var settings = document.getElementById('xtcSettings');
+    if (settings) settings.style.display = 'none';
+  }
+}
+
+function toggleXtcOptions() {
+  var box = document.getElementById('convertToXtc');
+  var settings = document.getElementById('xtcSettings');
+  var uploadBtn = document.getElementById('uploadBtn');
+  if (settings) settings.style.display = box.checked ? 'block' : 'none';
+  if (box.checked) {
+    var epubBox = document.getElementById('convertBeforeUpload');
+    if (epubBox && epubBox.checked) { epubBox.checked = false; toggleConvertOptions(); }
+    if (uploadBtn) { uploadBtn.textContent = 'Convert & Upload'; uploadBtn.classList.add('optimize'); }
+  } else {
+    if (uploadBtn) { uploadBtn.textContent = 'Upload'; uploadBtn.classList.remove('optimize'); }
+  }
+}
+
+async function uploadAsXtc() {
+  var fileInput = document.getElementById('fileInput');
+  var files = Array.prototype.slice.call(fileInput.files);
+  if (files.length === 0) { alert('Please select at least one file!'); return; }
+  if (typeof SkyPointConvert === 'undefined') { alert('Converter not loaded.'); return; }
+
+  var opts = {
+    device: 'X4',
+    quality: (document.getElementById('xtcQuality') || {}).value || 'grayscale',
+    detail: (document.getElementById('xtcDetail') || {}).checked ? 2 : 1,
+    dither: (document.getElementById('xtcDither') || {}).value || 'floyd',
+    splitWide: !!(document.getElementById('xtcSplitWide') || {}).checked,
+    mangaOrder: !!(document.getElementById('xtcManga') || {}).checked
+  };
+
+  isUploadInProgress = true;
+  uploadGeneration++;
+  document.getElementById('uploadModalClose').classList.add('disabled');
+  var progressContainer = document.getElementById('progress-container');
+  var progressFill = document.getElementById('progress-fill');
+  var progressText = document.getElementById('progress-text');
+  var uploadBtn = document.getElementById('uploadBtn');
+  progressContainer.style.display = 'block';
+  uploadBtn.disabled = true;
+  progressFill.style.backgroundColor = '#9b59b6';
+
+  function bail(msg) {
+    progressFill.style.backgroundColor = '#e74c3c';
+    progressText.textContent = msg;
+    isUploadInProgress = false;
+    document.getElementById('uploadModalClose').classList.remove('disabled');
+    uploadBtn.disabled = false;
+  }
+
+  var isCbz = function(n){ return /\.(cbz|zip)$/i.test(n); };
+  var isCbr = function(n){ return /\.cbr$/i.test(n); };
+  var archives = files.filter(function(f){ return isCbz(f.name) || isCbr(f.name); });
+  var imgs = files.filter(function(f){ return SkyPointConvert.IMAGE_EXT.test(f.name); });
+  var outputs = [];
+  try {
+    for (var i = 0; i < archives.length; i++) {
+      progressText.textContent = 'Converting ' + archives[i].name + '...';
+      var conv = isCbr(archives[i].name) ? SkyPointConvert.cbrToXtc : SkyPointConvert.cbzToXtc;
+      var cblob = await conv(archives[i], opts, function(done, total){
+        progressFill.style.width = Math.round(done / total * 50) + '%';
+      });
+      outputs.push(new File([cblob], SkyPointConvert.suggestName(archives[i].name), { type: 'application/octet-stream' }));
+    }
+    if (imgs.length > 0) {
+      progressText.textContent = 'Converting ' + imgs.length + ' image(s)...';
+      var iblob = await SkyPointConvert.imagesToXtc(imgs, opts, function(done, total){
+        progressFill.style.width = Math.round(done / total * 50) + '%';
+      });
+      outputs.push(new File([iblob], SkyPointConvert.suggestName(imgs[0].name), { type: 'application/octet-stream' }));
+    }
+  } catch (e) {
+    bail('Conversion failed: ' + (e && e.message ? e.message : e));
+    return;
+  }
+  if (outputs.length === 0) { bail('No images, CBZ, or CBR files selected to convert.'); return; }
+
+  progressFill.style.backgroundColor = '#27ae60';
+  var failed = [];
+  for (var k = 0; k < outputs.length; k++) {
+    var f = outputs[k];
+    progressText.textContent = 'Uploading ' + f.name + ' (' + (k + 1) + '/' + outputs.length + ')';
+    try {
+      await uploadFileHTTP(f, function(loaded, total){
+        progressFill.style.width = (50 + Math.round(loaded / total * 50)) + '%';
+      });
+    } catch (e) {
+      failed.push(f.name);
+    }
+  }
+  if (failed.length === 0) {
+    progressFill.style.width = '100%';
+    progressText.textContent = 'Comic upload complete!';
+    setTimeout(function(){ window.location.reload(); }, 1000);
+  } else {
+    bail('Failed: ' + failed.join(', '));
+  }
+}
+
 async function uploadFile() {
   if (isUploadInProgress) return;
 
+  {
+    var _xtcBox = document.getElementById('convertToXtc');
+    if (_xtcBox && _xtcBox.checked) { uploadAsXtc(); return; }
+  }
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;

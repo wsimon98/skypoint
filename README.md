@@ -37,6 +37,7 @@ Both scripts install [PlatformIO](https://platformio.org/) via `pipx` (installin
 - **Per-folder reading profiles** — drop a `.skypoint-folder.bin` sidecar in any folder on the SD card and SkyPoint applies that folder's settings overrides (font family/size, line spacing, paragraph alignment, screen margin, dark mode, hyphenation, focus reading) for every book in or under it. The nearest sidecar wins. Configure from the file browser: long-press a folder → **Save Folder Profile** captures your current reader settings, **Clear Folder Profile** removes the sidecar. See [Per-folder profiles](#per-folder-profiles) below.
 - **SkyPoint UI theme** as the default for fresh installs: three recent-book covers across the top, a 2-column tile-grid main menu, "SkyPoint" wordmark in the header.
 - **SkyPoint boot splash and sleep screen** — fox logo on boot, full-screen wolf on sleep. Auto-selects between X3 (528×792) and X4 (480×800) panels.
+- **Comics (`.xtc`)** — convert images, CBZ, or CBR archives to the reader's comic format right in the browser from the file-browser upload page, then read them with on-device rotation: long-press the page-turn button to rotate like a book. Portrait shows the whole page; landscape splits each page into three zoomed bands for larger text. See [Comics](#comics-xtc) below.
 
 The on-disk format and partition layout are unchanged from CrossPoint, so flashing SkyPoint over a stock CrossPoint install (or vice versa) preserves your books, reading positions, settings, and Wi-Fi credentials.
 
@@ -60,9 +61,28 @@ Long-press the folder → **Clear Folder Profile**.
 
 **Caveat:** settings changes made *during* a reading session are reverted when you close the book. The folder profile owns the session. To update a profile, close the book first, change the settings you want, then re-save the profile from the file browser.
 
+## Comics (.xtc)
+
+SkyPoint reads comics in a compact e-ink format called `.xtc`. You make them in the browser — no desktop tools needed.
+
+**Convert:** open the file browser's upload page and use the **Make comic (.xtc)** option with images, a CBZ, or a CBR (RAR) archive. Each CBZ/CBR becomes one `.xtc`; selected loose images become a single `.xtc`. Options:
+
+- **Grayscale** — 4-level grayscale, looks best for most comics and manga.
+- **Sharp zoom (larger files)** — stores each page at 2× screen resolution so text stays crisp when you zoom in on the device. Leave it on unless you're tight on SD space; turning it off stores pages at screen resolution (smaller files, softer when zoomed).
+
+**Read:** open the `.xtc` like any book.
+
+- **Portrait** shows the whole page, one page per turn — good for skimming.
+- **Long-press the page-turn button** to rotate the reader, exactly like rotating an EPUB (requires *Long-press button → Rotate* in Settings).
+- **Landscape** splits each page into three zoomed horizontal bands (top, middle, bottom). Page-turn moves band to band; advancing past the bottom band moves to the next page. This is the large-text reading mode.
+
+Rotation and zoom are entirely on-device, so you can flip past a page you don't need in portrait, then rotate back to landscape for the page you do. Older `.xtc` files made before Sharp zoom still open; their landscape bands are just upscaled (softer) — re-convert with Sharp zoom on for crisp text.
+
 ## Credits
 
 - [**CrossPoint Reader**](https://github.com/crosspoint-reader/crosspoint-reader) — the upstream firmware this is built on. All credit for the underlying e-reader engine, board support, and partition layout belongs there.
 - [**xteink-flasher**](https://github.com/crosspoint-reader/xteink-flasher) — original WebSerial flash bench that the page in `flasher/` is adapted from.
+- [**XTC.js**](https://github.com/varo6/xtcjs) by [varo6](https://github.com/varo6) & [sodaFMR](https://github.com/sodafmr) — the image/CBZ to XTC conversion (dithering, XTG page encoding, XTC container) used by the in-browser "Make comic (.xtc)" option on the file browser upload page is ported from XTC.js, itself derived from [cbz2xtc](https://github.com/tazua/cbz2xtc) by tazua.
+- [**node-unrar-js**](https://github.com/YuJianrong/node-unrar-js) by Yu Jianrong (MIT) — bundled WASM build used in-browser to extract images from CBR (RAR) archives for the "Make comic (.xtc)" option. It wraps the official [UnRAR](https://www.rarlab.com/rar_add.htm) sources, which are distributed under the UnRAR license (free to use for extraction; may not be used to recreate the RAR compression algorithm).
 
 Both MIT licensed. SkyPoint inherits the same license — see [`LICENSE`](LICENSE).
