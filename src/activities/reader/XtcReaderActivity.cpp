@@ -25,6 +25,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/FolderProfile.h"
+#include "util/SleepGlance.h"
 
 static constexpr int kXtcLandscapeSections = 3;
 
@@ -64,6 +65,9 @@ void XtcReaderActivity::onExit() {
 
   // SkyPoint per-folder profile: restore SETTINGS to pre-overlay values.
   FolderProfile::restore();
+
+  // SkyPoint glance: count today as a reading day for the streak display.
+  SleepGlance::recordReadingDay();
 
   renderer.setDarkMode(false);
 

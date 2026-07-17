@@ -8,11 +8,14 @@
 #include <Txt.h>
 #include <Xtc.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/SleepGlance.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
 #include "images/SkyPointSleepX3.h"
@@ -37,6 +40,13 @@ void SleepActivity::onEnter() {
     renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   } else {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  }
+
+  // SkyPoint glance: opportunistic clock-sync + weather refresh. Only does
+  // anything when Wi-Fi is already connected (never powers the radio on),
+  // and the "Going to sleep" popup above gives feedback during the fetch.
+  if (SETTINGS.sleepGlance) {
+    SleepGlance::refresh();
   }
 
   switch (SETTINGS.sleepScreen) {
@@ -70,7 +80,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, /*glance=*/true);
       file.close();
       if (dir) dir.close();
       return;
@@ -137,7 +147,7 @@ void SleepActivity::renderCustomSleepScreen() const {
         delay(100);
         Bitmap bitmap(randFile, true);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
+          renderBitmapSleepScreen(bitmap, /*glance=*/true);
           randFile.close();
           dir.close();
           return;
@@ -206,6 +216,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
     renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
   }
 
+  drawGlanceOverlay();
+
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
     renderer.invertScreen();
   }
@@ -217,14 +229,16 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.setDarkMode(wasDark);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool glance) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   float cropX = 0, cropY = 0;
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
-  if (bitmap.getWidth() > pageWidth || bitmap.getHeight() > pageHeight) {
+  // Any size mismatch goes through the fit path (downscale OR upscale) so a
+  // wrong-size sleep image fills the panel instead of rendering 1:1 in a corner.
+  if (bitmap.getWidth() != pageWidth || bitmap.getHeight() != pageHeight) {
     // image will scale, make sure placement is right
     float ratio = static_cast<float>(bitmap.getWidth()) / static_cast<float>(bitmap.getHeight());
     const float screenRatio = static_cast<float>(pageWidth) / static_cast<float>(pageHeight);
@@ -263,10 +277,16 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   const bool hasGreyscale = bitmap.hasGreyscale() &&
                             SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
-  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, /*allowUpscale=*/true);
 
   if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
+  }
+
+  // Glance overlay only on the plain BW path: in the grayscale flow the gray
+  // planes would repaint the overlay region and muddy the text.
+  if (glance && !hasGreyscale) {
+    drawGlanceOverlay();
   }
 
   if (hasGreyscale) {
@@ -283,13 +303,13 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, /*allowUpscale=*/true);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY, /*allowUpscale=*/true);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();
@@ -385,4 +405,51 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+void SleepActivity::drawGlanceOverlay() const {
+  if (!SETTINGS.sleepGlance) return;
+
+  char timeBuf[12];
+  char weatherBuf[48];
+  char streakBuf[64];
+  const bool hasTime = SleepGlance::timeString(timeBuf, sizeof(timeBuf));
+  const bool hasWeather = SleepGlance::weatherString(weatherBuf, sizeof(weatherBuf));
+  const bool hasStreak = SleepGlance::streakString(streakBuf, sizeof(streakBuf));
+  if (!hasTime && !hasWeather && !hasStreak) return;
+
+  const int pageWidth = renderer.getScreenWidth();
+
+  int contentW = 0;
+  if (hasTime) contentW = std::max(contentW, renderer.getTextWidth(UI_10_FONT_ID, timeBuf, EpdFontFamily::BOLD));
+  if (hasWeather) contentW = std::max(contentW, renderer.getTextWidth(SMALL_FONT_ID, weatherBuf));
+  if (hasStreak) contentW = std::max(contentW, renderer.getTextWidth(SMALL_FONT_ID, streakBuf));
+
+  const int timeLineH = hasTime ? renderer.getLineHeight(UI_10_FONT_ID) : 0;
+  const int smallLineH = renderer.getLineHeight(SMALL_FONT_ID);
+  const int contentH = timeLineH + (hasWeather ? smallLineH : 0) + (hasStreak ? smallLineH : 0);
+
+  // White pill behind the text keeps it readable over any wallpaper art.
+  constexpr int padX = 16;
+  constexpr int padY = 10;
+  const int pillW = contentW + padX * 2;
+  const int pillH = contentH + padY * 2;
+  const int pillX = (pageWidth - pillW) / 2;
+  constexpr int pillY = 16;
+
+  renderer.fillRoundedRect(pillX, pillY, pillW, pillH, 10, Color::White);
+  renderer.drawRoundedRect(pillX, pillY, pillW, pillH, 1, 10, true);
+
+  int textY = pillY + padY;
+  if (hasTime) {
+    renderer.drawCenteredText(UI_10_FONT_ID, textY, timeBuf, true, EpdFontFamily::BOLD);
+    textY += timeLineH;
+  }
+  if (hasWeather) {
+    renderer.drawCenteredText(SMALL_FONT_ID, textY, weatherBuf);
+    textY += smallLineH;
+  }
+  if (hasStreak) {
+    renderer.drawCenteredText(SMALL_FONT_ID, textY, streakBuf);
+  }
 }

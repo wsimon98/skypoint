@@ -183,6 +183,8 @@ class CrossPointSettings {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // SkyPoint: glanceable info (clock/weather/streak) overlaid on the sleep screen
+  uint8_t sleepGlance = 1;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

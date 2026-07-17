@@ -18,6 +18,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/FolderProfile.h"
+#include "util/SleepGlance.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -60,6 +61,9 @@ void TxtReaderActivity::onExit() {
 
   // SkyPoint per-folder profile: restore SETTINGS to pre-overlay values.
   FolderProfile::restore();
+
+  // SkyPoint glance: count today as a reading day for the streak display.
+  SleepGlance::recordReadingDay();
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
