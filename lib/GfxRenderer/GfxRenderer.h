@@ -192,8 +192,11 @@ class GfxRenderer {
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
   void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
+  // allowUpscale: opt-in nearest-neighbor upscaling when the (cropped) bitmap is
+  // smaller than the target bounds. Off by default so covers/thumbnails keep the
+  // historical 1:1 behavior; the sleep screen uses it to fill the panel.
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
-                  float cropY = 0) const;
+                  float cropY = 0, bool allowUpscale = false) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 

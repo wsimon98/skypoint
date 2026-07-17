@@ -1157,10 +1157,11 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 }
 
 void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, const bool allowUpscale) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
-  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
-  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
+  // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit).
+  // The 1-bit fast path has no upscale support, so route around it when upscaling.
+  if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f && !allowUpscale) {
     drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
     return;
   }
@@ -1188,10 +1189,11 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     hasTargetBounds = true;
   }
 
-  if (hasTargetBounds && fitScale < 1.0f) {
+  if (hasTargetBounds && (fitScale < 1.0f || (allowUpscale && fitScale > 1.0f))) {
     scale = fitScale;
     isScaled = true;
   }
+  const bool isUpscaled = isScaled && scale > 1.0f;
   LOG_DBG("GFX", "Scaling by %f - %s", scale, isScaled ? "scaled" : "not scaled");
 
   // Calculate output row size (2 bits per pixel, packed into bytes)
@@ -1210,12 +1212,19 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
     // Screen's (0, 0) is the top-left corner.
-    int screenY = -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
+    const int srcY = -cropPixY + (bitmap.isTopDown() ? bmpY : bitmap.getHeight() - 1 - bmpY);
+    // Destination row span [screenY, screenYEnd): 1 row normally; when upscaling,
+    // each source row expands to its full destination span so no gaps are left.
+    int screenY = srcY;
+    int screenYEnd = srcY + 1;
     if (isScaled) {
-      screenY = std::floor(screenY * scale);
+      screenY = std::floor(srcY * scale);
+      screenYEnd =
+          isUpscaled ? std::max(static_cast<int>(std::floor((srcY + 1) * scale)), screenY + 1) : screenY + 1;
     }
     screenY += y;  // the offset should not be scaled
-    if (screenY >= getScreenHeight()) {
+    screenYEnd += y;
+    if (!isUpscaled && screenY >= getScreenHeight()) {
       break;
     }
 
@@ -1226,7 +1235,7 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       return;
     }
 
-    if (screenY < 0) {
+    if (screenYEnd <= 0 || screenY >= getScreenHeight()) {
       continue;
     }
 
@@ -1236,26 +1245,42 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
     }
 
     for (int bmpX = cropPixX; bmpX < bitmap.getWidth() - cropPixX; bmpX++) {
-      int screenX = bmpX - cropPixX;
+      const int srcX = bmpX - cropPixX;
+      int screenX = srcX;
+      int screenXEnd = srcX + 1;
       if (isScaled) {
-        screenX = std::floor(screenX * scale);
+        screenX = std::floor(srcX * scale);
+        screenXEnd =
+            isUpscaled ? std::max(static_cast<int>(std::floor((srcX + 1) * scale)), screenX + 1) : screenX + 1;
       }
       screenX += x;  // the offset should not be scaled
+      screenXEnd += x;
       if (screenX >= getScreenWidth()) {
         break;
       }
-      if (screenX < 0) {
+      if (screenXEnd <= 0) {
         continue;
       }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
+      bool state = true;
       if (renderMode == BW && val < 3) {
-        drawPixel(screenX, screenY);
+        state = true;
       } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
+        state = false;
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+        state = false;
+      } else {
+        continue;
+      }
+
+      const int syEnd = std::min(screenYEnd, getScreenHeight());
+      const int sxEnd = std::min(screenXEnd, getScreenWidth());
+      for (int sy = std::max(screenY, 0); sy < syEnd; sy++) {
+        for (int sx = std::max(screenX, 0); sx < sxEnd; sx++) {
+          drawPixel(sx, sy, state);
+        }
       }
     }
   }
