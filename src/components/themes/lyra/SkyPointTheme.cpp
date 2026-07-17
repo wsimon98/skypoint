@@ -107,7 +107,7 @@ void SkyPointTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonC
       if (iconBitmap != nullptr) {
         const int iconX = x + (tileW - tileIconSize) / 2;
         const int iconY = y + tileTopInset;
-        renderer.drawIcon(iconBitmap, iconX, iconY, tileIconSize, tileIconSize);
+        renderer.drawIcon(iconBitmap, iconX, iconY, tileIconSize);
       }
     }
 
