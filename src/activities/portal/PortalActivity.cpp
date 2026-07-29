@@ -94,21 +94,24 @@ void PortalActivity::loop() {
   }
 
   if (state == PortalState::PAGE_MENU) {
-    const bool hasLinks = !pageLinks.empty();
-    const int menuCount = hasLinks ? 3 : 2;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    const int menuCount = static_cast<int>(pageMenu.size());
+    if (menuCount == 0 || mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       state = PortalState::BROWSING;
       requestUpdate();
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (menuIndex == 0) {
-        openReader();
-      } else if (hasLinks && menuIndex == 1) {
-        enterLinksList();
-      } else {
-        state = PortalState::BROWSING;
-        requestUpdate();
+      switch (pageMenu[menuIndex]) {
+        case PageAction::ReadPage:
+          openReader();
+          break;
+        case PageAction::ShowLinks:
+          enterLinksList();
+          break;
+        case PageAction::BackToList:
+          state = PortalState::BROWSING;
+          requestUpdate();
+          break;
       }
       return;
     }
@@ -196,16 +199,33 @@ void PortalActivity::render(RenderLock&&) {
     auto title = renderer.truncatedText(UI_10_FONT_ID, pageTitle.c_str(), pageWidth - 40);
     renderer.drawCenteredText(UI_10_FONT_ID, 80, title.c_str(), true, EpdFontFamily::BOLD);
 
+    // Tell the user why "Read page" is absent rather than silently offering less.
+    if (!pageHasText) {
+      renderer.drawCenteredText(SMALL_FONT_ID, 112, tr(STR_PORTAL_NO_TEXT));
+    }
+
     char linksLabel[48];
     snprintf(linksLabel, sizeof(linksLabel), tr(STR_PORTAL_LINKS_FORMAT), static_cast<unsigned>(pageLinks.size()));
-    const char* items[3] = {tr(STR_PORTAL_READ_PAGE), pageLinks.empty() ? tr(STR_PORTAL_BACK_TO_LIST) : linksLabel,
-                            tr(STR_PORTAL_BACK_TO_LIST)};
-    const int menuCount = pageLinks.empty() ? 2 : 3;
-    for (int i = 0; i < menuCount; i++) {
-      if (i == menuIndex) {
-        renderer.fillRect(0, 140 + i * 40 - 4, pageWidth - 1, 36);
+
+    for (size_t i = 0; i < pageMenu.size(); i++) {
+      const char* label = tr(STR_PORTAL_BACK_TO_LIST);
+      switch (pageMenu[i]) {
+        case PageAction::ReadPage:
+          label = tr(STR_PORTAL_READ_PAGE);
+          break;
+        case PageAction::ShowLinks:
+          label = linksLabel;
+          break;
+        case PageAction::BackToList:
+          label = tr(STR_PORTAL_BACK_TO_LIST);
+          break;
       }
-      renderer.drawText(UI_10_FONT_ID, 30, 140 + i * 40, items[i], i != menuIndex);
+      const bool selected = (static_cast<int>(i) == menuIndex);
+      const int y = 140 + static_cast<int>(i) * 40;
+      if (selected) {
+        renderer.fillRect(0, y - 4, pageWidth - 1, 36);
+      }
+      renderer.drawText(UI_10_FONT_ID, 30, y, label, !selected);
     }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -307,10 +327,19 @@ void PortalActivity::openEntry(const PortalEntry& entry) {
   }
 
   // Offline: a cached copy opens directly (no link list without a fresh parse).
-  if (Storage.exists(pageTxtPath.c_str())) {
-    LOG_DBG(TAG, "offline cache hit: %s", pageTxtPath.c_str());
-    openReader();
-    return;
+  // Size-checked because a build before the empty-text guard could have left a
+  // 0-byte file here, and the reader has nothing to draw for one.
+  HalFile cached;
+  if (Storage.openFileForRead(TAG, pageTxtPath, cached)) {
+    const size_t cachedSize = cached.size();
+    cached.close();
+    if (cachedSize >= 64) {
+      LOG_DBG(TAG, "offline cache hit: %s (%u bytes)", pageTxtPath.c_str(), static_cast<unsigned>(cachedSize));
+      openReader();
+      return;
+    }
+    LOG_DBG(TAG, "discarding empty cached page: %s", pageTxtPath.c_str());
+    Storage.remove(pageTxtPath.c_str());
   }
 
   launchWifiSelection();
@@ -378,9 +407,36 @@ void PortalActivity::fetchPage(const PortalEntry& entry) {
     pageLinks.push_back(PortalEntry{std::move(link.text), std::move(link.url)});
   }
 
+  // A JS-rendered shell yields markup but no readable text. Handing that empty
+  // file to the reader leaves it with nothing to draw, so the "Indexing" popup
+  // stays on the e-ink screen and the device looks frozen. Drop the file and
+  // omit "Read page" instead.
+  constexpr size_t MIN_READABLE_BYTES = 64;
+  pageHasText = converter.getTextBytes() >= MIN_READABLE_BYTES;
+  if (!pageHasText) {
+    LOG_DBG(TAG, "no readable text (%u bytes) for %s", static_cast<unsigned>(converter.getTextBytes()),
+            entry.url.c_str());
+    Storage.remove(pageTxtPath.c_str());
+  }
+
+  if (!pageHasText && pageLinks.empty()) {
+    state = PortalState::ERROR;
+    errorMessage = tr(STR_PORTAL_NO_TEXT);
+    requestUpdate();
+    return;
+  }
+
+  buildPageMenu();
   menuIndex = 0;
   state = PortalState::PAGE_MENU;
   requestUpdate();
+}
+
+void PortalActivity::buildPageMenu() {
+  pageMenu.clear();
+  if (pageHasText) pageMenu.push_back(PageAction::ReadPage);
+  if (!pageLinks.empty()) pageMenu.push_back(PageAction::ShowLinks);
+  pageMenu.push_back(PageAction::BackToList);
 }
 
 void PortalActivity::openReader() {

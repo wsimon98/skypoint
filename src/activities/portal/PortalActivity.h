@@ -31,6 +31,10 @@ class PortalActivity final : public Activity {
     std::string url;
   };
 
+  // The page menu is built as an explicit action list rather than fixed slots,
+  // so entries can be omitted (e.g. no readable text) without index arithmetic.
+  enum class PageAction { ReadPage, ShowLinks, BackToList };
+
   ButtonNavigator buttonNavigator;
   PortalState state = PortalState::BROWSING;
   std::vector<PortalEntry> entries;               // current list (portal.md or a page's links)
@@ -44,9 +48,12 @@ class PortalActivity final : public Activity {
   std::string pageTitle;
   std::string pageTxtPath;
   std::vector<PortalEntry> pageLinks;
+  std::vector<PageAction> pageMenu;
+  bool pageHasText = false;
   PortalEntry pendingEntry;  // entry to open once Wi-Fi comes up
 
   bool loadPortalFile();
+  void buildPageMenu();
   void openEntry(const PortalEntry& entry);
   void fetchPage(const PortalEntry& entry);
   void launchWifiSelection();

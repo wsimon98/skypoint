@@ -11,11 +11,14 @@ constexpr size_t LINK_TEXT_CAP = 96;
 constexpr size_t TITLE_CAP = 96;
 constexpr size_t HREF_CAP = 512;
 
-// Tags whose whole subtree is boilerplate, not article text. script/style are
-// handled separately via RAWTEXT (their contents aren't markup).
+// Tags whose whole subtree can never be readable text. Deliberately limited to
+// markup that is non-content by definition: dropping nav/footer/aside/form here
+// as "boilerplate" silently deleted whole pages, because link-wall aggregators
+// (Whatfinger, Drudge clones) put their headlines inside exactly those
+// containers. They are treated as block tags instead, so they contribute
+// newlines and keep their text.
 bool isDropTag(const char* t) {
-  static constexpr const char* const DROP[] = {"head",  "template", "noscript", "svg",
-                                               "iframe", "form",     "nav",      "footer", "aside"};
+  static constexpr const char* const DROP[] = {"head", "template", "noscript", "svg", "iframe"};
   for (const char* d : DROP) {
     if (strcmp(t, d) == 0) return true;
   }
@@ -25,9 +28,10 @@ bool isDropTag(const char* t) {
 bool isRawTextTag(const char* t) { return strcmp(t, "script") == 0 || strcmp(t, "style") == 0; }
 
 bool isBlockTag(const char* t) {
-  static constexpr const char* const BLOCK[] = {"p",  "div",   "li",    "tr",     "blockquote", "section", "article",
-                                                "ul", "ol",    "table", "header", "main",       "figure",  "pre",
-                                                "hr", "figcaption"};
+  static constexpr const char* const BLOCK[] = {"p",     "div",    "li",      "tr",     "blockquote", "section",
+                                                "article", "ul",   "ol",      "table",  "header",     "main",
+                                                "figure", "pre",   "hr",      "figcaption", "nav",    "footer",
+                                                "aside",  "form"};
   for (const char* b : BLOCK) {
     if (strcmp(t, b) == 0) return true;
   }
@@ -370,7 +374,10 @@ void HtmlToText::emitChar(const char c) {
 void HtmlToText::writeByte(const char c) {
   out.write(static_cast<uint8_t>(c));
   newlines = c == '\n' ? newlines + 1 : 0;
-  if (c != '\n') wroteAny = true;
+  if (c != '\n') {
+    wroteAny = true;
+    textBytes++;
+  }
 }
 
 void HtmlToText::emitNewline(const uint8_t want) {

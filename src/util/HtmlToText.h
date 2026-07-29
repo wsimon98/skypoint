@@ -28,6 +28,9 @@ class HtmlToText {
 
   const std::string& getTitle() const { return title; }
   std::vector<HtmlLink>& getLinks() { return links; }
+  // Bytes of readable text actually emitted. Used to detect pages that yielded
+  // nothing (JS-rendered shells), so an empty file is never handed to the reader.
+  size_t getTextBytes() const { return textBytes; }
 
  private:
   enum class State : uint8_t {
@@ -94,4 +97,5 @@ class HtmlToText {
   bool pendingSpace = false;
   uint8_t newlines = 2;  // consecutive '\n' already written (2 = at blank line)
   bool wroteAny = false;
+  size_t textBytes = 0;  // non-newline bytes emitted
 };
