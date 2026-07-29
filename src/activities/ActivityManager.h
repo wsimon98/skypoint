@@ -17,7 +17,9 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, PORTAL, FILE_TRANSFER, SETTINGS_MENU };
+// NETWORK covers both network features (file transfer + SkyPortal), which live
+// behind a single home entry so the home menu stays at four base items.
+enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, NETWORK, SETTINGS_MENU };
 
 /**
  * ActivityManager
@@ -86,6 +88,7 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
   void goToBrowser();
+  void goToNetworkMenu();
   void goToPortal();
   void goToReader(std::string path);
   void goToSleep(bool fromTimeout = false);
