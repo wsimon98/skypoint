@@ -2,7 +2,7 @@
 
 A custom firmware fork for the ESP32-C3-based Xteink X3 and X4 e-ink readers. Based on the [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) project.
 
-Currently tracking CrossPoint **1.4.1-dev**. See [What's new](#whats-new) for the latest changes.
+Currently tracking CrossPoint **2.0.0**. See [What's new](#whats-new) for the latest changes.
 
 ## Disclaimer
 
@@ -45,21 +45,23 @@ That erases only the 8 KB `otadata` partition, leaving your settings and SD card
 
 ## Differences from CrossPoint
 
-- **Dark mode** as a system-wide toggle (Settings → Display → Dark Mode). Applies to reader, home, and settings. Per-book overrides stored alongside each book's progress file.
+- **Dark mode** as a system-wide toggle (Settings → Display → Dark Mode), with a per-book override (System / On / Off) in the reader menu and a dark-mode field in folder profiles. It runs on CrossPoint's display-level inversion, so photos and covers inside books keep their normal colours. Per-book overrides are stored alongside each book's progress file.
 - **Per-folder reading profiles** — drop a `.skypoint-folder.bin` sidecar in any folder on the SD card and SkyPoint applies that folder's settings overrides (font family/size, line spacing, paragraph alignment, screen margin, dark mode, hyphenation, focus reading) for every book in or under it. The nearest sidecar wins. Configure from the file browser: long-press a folder → **Save Folder Profile** captures your current reader settings, **Clear Folder Profile** removes the sidecar. See [Per-folder profiles](#per-folder-profiles) below.
 - **SkyPoint UI theme** as the default for fresh installs: three recent-book covers across the top, a 2-column tile-grid main menu, "SkyPoint" wordmark in the header.
 - **SkyPoint boot splash and sleep screen** — fox logo on boot, full-screen wolf on sleep. Auto-selects between X3 (528×792) and X4 (480×800) panels.
 - **Comics (`.xtc`)** — convert images, CBZ, or CBR archives to the reader's comic format right in the browser from the file-browser upload page, then read them with on-device rotation: long-press the page-turn button to rotate like a book. Portrait shows the whole page; landscape splits each page into three zoomed bands for larger text. See [Comics](#comics-xtc) below.
 - **Sleep screen info** (Settings → Display → Sleep Screen Info, on by default) — overlays the local time, current weather, and your reading streak on the sleep screen. Zero configuration: location, timezone and units come from the device's own internet connection, so it is correct wherever you are. See [Sleep screen info](#sleep-screen-info) below.
-- **Sleep wallpaper scaling fix** — a custom sleep image smaller than the panel is now scaled up to fill it instead of being drawn at 1:1 in the middle of the screen.
+- **Updates from SkyPoint's own releases** — Settings → Check for updates installs the latest [SkyPoint release](https://github.com/wsimon98/skypoint/releases), never stock CrossPoint. See [Updates](#updates).
 
 The on-disk format and partition layout are unchanged from CrossPoint, so flashing SkyPoint over a stock CrossPoint install (or vice versa) preserves your books, reading positions, settings, and Wi-Fi credentials.
 
 ## What's new
 
-**Rebased onto CrossPoint 1.4.1-dev** (from 1.3.0-dev), picking up roughly seven weeks of upstream work, including EPUB bookmarks, smart KOReader progress sync, right-to-left script support plus eight new interface languages, Wi-Fi auto-connect, configurable OPDS download folders, a CORS-enabled HTTP API, numerous EPUB/CSS parser crash and out-of-memory fixes, and corrected sleep/boot display refresh waveforms.
+**Updated to CrossPoint 2.0.0** (from 1.4.1-dev), merging four upstream releases (1.5.0, 1.6.0, 1.6.5, 2.0.0, roughly 500 commits). Highlights for the X3/X4: hundreds of crash and out-of-memory fixes and faster book opening; better EPUB rendering (tables, static GIFs, `<ruby>`, embedded fonts, footnotes); TXT and Markdown rendered by the EPUB engine; a unified Text Settings screen with live preview, point-size fonts, word/character spacing and paragraph indents; text clipping/highlighting; dictionary synonyms, recursive lookup and history; a Library view, file renaming and swipe to delete; KOReader sync profiles, sync on sleep and bookmark sync; OPDS 2.0; a Bluetooth page turner; timezone and DST settings; a guard against flashing firmware built for the wrong chip; an SD-card plugin system; and a redesigned web interface.
 
-**Added in SkyPoint:** sleep screen info (clock, weather, reading streak) and the sleep wallpaper scaling fix.
+**Adapted for SkyPoint:** every SkyPoint feature carried over. Dark mode now runs on CrossPoint's night-mode mechanism (your existing setting carries over). Custom sleep wallpapers of any size are now scaled to fill the screen by CrossPoint's smoother bilinear converter, which replaces SkyPoint's earlier nearest-neighbour fix. Folder profiles saved before the font-size change keep working. The SkyPoint theme keeps its existing setting value, so devices stay on it after updating. The comic converter now loads on first use.
+
+**Added in SkyPoint:** updates from SkyPoint's own GitHub releases (see [Updates](#updates)).
 
 **Removed:** an experimental web-page reader ("SkyPortal") was built and then dropped. Fetching and converting real-world pages was slow on a single-core ESP32-C3, aggregator markup produced poor reading text, and its failure modes were hard to distinguish from a hung device. It remains in the git history if anyone wants to revive it.
 
@@ -87,7 +89,7 @@ Long-press the folder → **Clear Folder Profile**.
 
 With **Settings → Display → Sleep Screen Info** enabled (the default), the sleep screen carries a small panel showing:
 
-- **The time**, in your Settings clock format. The X3 uses its DS3231 real-time clock. The X4 has no clock chip, so the system clock is synchronised over the internet instead and then survives sleep.
+- **The time**, in your Settings clock format. The X3 uses its DS3231 real-time clock with the timezone and daylight-saving rule chosen in Settings. The X4 has no clock chip, so the system clock is synchronised over the internet instead and then survives sleep.
 - **Current weather** — temperature and a short description, in °F or °C depending on your country.
 - **Your reading streak**, once you have read on two or more consecutive days.
 
@@ -115,6 +117,17 @@ SkyPoint reads comics in a compact e-ink format called `.xtc`. You make them in 
 - **Landscape** splits each page into three zoomed horizontal bands (top, middle, bottom). Page-turn moves band to band; advancing past the bottom band moves to the next page. This is the large-text reading mode.
 
 Rotation and zoom are entirely on-device, so you can flip past a page you don't need in portrait, then rotate back to landscape for the page you do. Older `.xtc` files made before Sharp zoom still open; their landscape bands are just upscaled (softer) — re-convert with Sharp zoom on for crisp text.
+
+## Updates
+
+On Wi-Fi, **Settings → Check for updates** looks at the latest release on [github.com/wsimon98/skypoint/releases](https://github.com/wsimon98/skypoint/releases) and, if it is newer than what is running, downloads `skypoint-<version>-x3-x4.bin` and installs it into the inactive firmware slot (a failed download leaves the current firmware bootable). It never offers stock CrossPoint releases.
+
+**Publishing a release (maintainers):**
+1. Set `version` under `[crosspoint]` in `platformio.ini` to the new version (three numbers, e.g. `2.0.1`). Devices compare major.minor.patch, so bump it for every release. SkyPoint versions follow the CrossPoint release they are based on; bump the last number for SkyPoint-only releases.
+2. Commit, then create a GitHub release with a tag of the same version (`2.0.1` or `v2.0.1`) and publish it.
+3. The **Release firmware** workflow builds the firmware from that tag and attaches `skypoint-<version>-x3-x4.bin` to the release. Devices see it on their next check.
+
+The same `.bin` can be flashed by hand with the browser flasher.
 
 ## Credits
 
