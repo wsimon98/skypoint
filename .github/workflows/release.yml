@@ -1,0 +1,71 @@
+name: Release firmware
+
+# Publishing a GitHub release builds the X3/X4 firmware from that tag and
+# attaches it as skypoint-<version>-x3-x4.bin. Devices find it from
+# Settings -> Check for updates (src/network/OtaUpdater.cpp), so the asset name
+# and the tag must stay in this form. Tag releases with the version from
+# platformio.ini ([crosspoint] version), e.g. 2.0.1 or v2.0.1.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          submodules: recursive
+
+      - name: Check the tag matches platformio.ini
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          configured="$(sed -n 's/^version = //p' platformio.ini | head -n1)"
+          if [ "$version" != "$configured" ]; then
+            echo "::error::Release tag $RELEASE_TAG does not match platformio.ini version $configured"
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          # custom_sdkconfig runs a nested `pio run` from ~/.platformio/penv; keep it on
+          # the same core version as the outer one (newer cores fail that nested build).
+          pio pkg install -e gh_release
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+
+      - name: Build
+        run: pio run -e gh_release -j1
+
+      - name: Attach firmware to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          asset="skypoint-${version}-x3-x4.bin"
+          cp .pio/build/gh_release/firmware.bin "$asset"
+          gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+    permissions:
+      contents: write
