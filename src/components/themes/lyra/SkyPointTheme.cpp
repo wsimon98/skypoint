@@ -1,6 +1,7 @@
 #include "components/themes/lyra/SkyPointTheme.h"
 
 #include <GfxRenderer.h>
+#include <HalPowerManager.h>
 
 #include <algorithm>
 
@@ -51,6 +52,21 @@ const uint8_t* skyPointIconFor(UIIcon icon) {
   }
 }
 }  // namespace
+
+void SkyPointTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  const uint16_t percentage = powerManager.getBatteryPercentage();
+  const int y = rect.y + 6;
+
+  if (showPercentage) {
+    const auto percentageText = std::to_string(percentage) + "%";
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
+  }
+
+  const Rect iconRect{rect.x, y, rect.width, rect.height};
+  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
+  fillBatteryIcon(renderer, iconRect, percentage);
+}
 
 void SkyPointTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   if (title != nullptr) {

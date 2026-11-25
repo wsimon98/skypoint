@@ -4,6 +4,7 @@ build
 *.cpfont
 .DS_Store
 flasher/builds/
+flake.*
 *.generated.h
 .history/
 .idea

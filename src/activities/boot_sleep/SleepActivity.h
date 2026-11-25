@@ -1,7 +1,10 @@
 #pragma once
+#include <string>
+
 #include "activities/Activity.h"
 
 class Bitmap;
+class HalFile;
 
 class SleepActivity final : public Activity {
  public:
@@ -14,8 +17,12 @@ class SleepActivity final : public Activity {
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
   // glance: overlay clock/weather/streak (skipped for book-cover screens so the art stays clean)
-  void renderBitmapSleepScreen(const Bitmap& bitmap, bool glance = false) const;
+  void renderBitmapSleepScreen(const Bitmap& bitmap, bool preserveBackground = false, bool glance = false) const;
+  bool renderSleepOverlayFile(HalFile& file, const char* pathForLog) const;
+  bool renderTransparentOverlayPng(const std::string& path) const;
+  bool renderSleepOverlayPath(const std::string& path) const;
   void renderLastScreenSleepScreen() const;
+  void renderTransparentCustomSleepScreen() const;
   void renderBlankSleepScreen() const;
   // SkyPoint: draw the glanceable info pill (top center). No-op when disabled
   // in settings or when no trustworthy data is available.

@@ -5,61 +5,73 @@
 #include <string>
 #include <vector>
 
-#include "activities/Activity.h"
+#include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
-#include "util/ButtonNavigator.h"
 
-class EpubReaderMenuActivity final : public Activity {
+class EpubReaderMenuActivity final : public UiListActivity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
     SELECT_CHAPTER,
     FOOTNOTES,
     TEXT_SETTINGS,
+    NIGHT_MODE,
+    FRONTLIGHT,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,
     TOGGLE_BOOKMARK,
-    DARK_MODE,
     SCREENSHOT,
     DISPLAY_QR,
     GO_HOME,
     SYNC,
     DELETE_CACHE,
-    DICTIONARY
+    DICTIONARY,
+    DARK_MODE  // SkyPoint per-book dark-mode override (kept last so other action values don't shift)
   };
+
+  struct MenuItem {
+    MenuAction action;
+    StrId labelId;
+  };
+
+  static void buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks);
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
                                   const uint8_t currentDarkOverride);
 
-  void onEnter() override;
-  void onExit() override;
-  void loop() override;
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
 
  private:
-  struct MenuItem {
-    MenuAction action;
-    StrId labelId;
-  };
+  // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
+  // fixed-capacity array avoids any heap allocation for the row list. Labels
+  // are set once in the constructor (buildMenuRowItems()); buildScreen()
+  // only refreshes rows whose values reflect live state.
+  static constexpr size_t MAX_MENU_ITEMS = 16;
+  freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
+  void buildMenuRowItems();
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
+  int listCount() const override { return static_cast<int>(menuItems.size()); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  // Popup input runs before any button or touch handling.
+  bool handleCustomInput() override;
+  // Back closes on RELEASE and Confirm activates on RELEASE; everything else
+  // (row navigation, page jumps) falls through to the base handler.
+  bool handleButtons() override;
+  // Header via GUI.drawHeader inside the safe area for the battery indicator.
+  void drawChrome() override;
+
   void closeCancelled();
 
   // Fixed menu layout
-  const std::vector<MenuItem> menuItems;
+  std::vector<MenuItem> menuItems;
 
-  int selectedIndex = 0;
-
-  ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;
-  // True while the button press that closed the popup is still held; its release
-  // must not fall through to the menu's own Back/Confirm handlers.
-  bool popupClosing = false;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;

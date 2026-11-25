@@ -26,4 +26,10 @@ class SkyPointTheme : public Lyra3CoversTheme {
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;
+
+ private:
+  // Battery icon at rect.x with the percentage to its left. CrossPoint 1.6 moved its
+  // headers to FreeInkUI and dropped BaseTheme::drawBatteryRight; the wordmark
+  // header keeps its own copy so it looks the same as before.
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage) const;
 };
