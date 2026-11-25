@@ -21,6 +21,10 @@
 //   [1] override mask — see MaskBit below
 //   [2..9] eight value bytes, one per overridable field
 //
+// The font-size byte holds a point size. Sidecars written before the CrossPoint
+// 1.5 point-size change hold the old SMALL..EXTRA_LARGE slot (0..3) instead;
+// those are folded to the matching point size on load, exactly like settings.
+//
 // The current implementation captures a snapshot of *all* relevant reader
 // fields when the profile is saved (mask = MASK_ALL). Selective per-field
 // override is supported by the sidecar format for forward compatibility.
@@ -81,6 +85,9 @@ inline bool loadFromFile(const std::string& path, Profile& out) {
   out.mask = buf[1];
   out.fontFamily = buf[2];
   out.fontSize = buf[3];
+  if (out.fontSize <= CrossPointSettings::LEGACY_FONT_SIZE_MAX) {
+    out.fontSize = 12 + out.fontSize * 2;  // 0,1,2,3 -> 12,14,16,18
+  }
   out.lineSpacing = buf[4];
   out.paragraphAlign = buf[5];
   out.screenMargin = buf[6];
@@ -135,7 +142,7 @@ inline Profile snapshotFromSettings() {
   Profile p;
   p.mask = MASK_ALL;
   p.fontFamily = s.fontFamily;
-  p.fontSize = s.fontSize;
+  p.fontSize = s.fontPointSize;
   p.lineSpacing = s.lineSpacing;
   p.paragraphAlign = s.paragraphAlignment;
   p.screenMargin = s.screenMargin;
@@ -195,8 +202,8 @@ inline bool apply(const std::string& bookPath) {
     s.fontFamily = overlay.fontFamily;
   }
   if (overlay.mask & MASK_FONT_SIZE) {
-    state.baseline.fontSize = s.fontSize;
-    s.fontSize = overlay.fontSize;
+    state.baseline.fontSize = s.fontPointSize;
+    s.fontPointSize = overlay.fontSize;
   }
   if (overlay.mask & MASK_LINE_SPACING) {
     state.baseline.lineSpacing = s.lineSpacing;
@@ -234,7 +241,7 @@ inline void restore() {
   auto& s = CrossPointSettings::getInstance();
   const auto mask = state.baseline.mask;
   if (mask & MASK_FONT_FAMILY) s.fontFamily = state.baseline.fontFamily;
-  if (mask & MASK_FONT_SIZE) s.fontSize = state.baseline.fontSize;
+  if (mask & MASK_FONT_SIZE) s.fontPointSize = state.baseline.fontSize;
   if (mask & MASK_LINE_SPACING) s.lineSpacing = state.baseline.lineSpacing;
   if (mask & MASK_PARAGRAPH_ALIGN) s.paragraphAlignment = state.baseline.paragraphAlign;
   if (mask & MASK_SCREEN_MARGIN) s.screenMargin = state.baseline.screenMargin;
