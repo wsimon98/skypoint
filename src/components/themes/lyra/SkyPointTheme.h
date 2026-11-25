@@ -18,8 +18,8 @@ class SkyPointTheme : public Lyra3CoversTheme {
   // the LyraTheme header. When the caller passes nullptr — which HomeActivity
   // does on the home screen — we render a fixed "SkyPoint" wordmark so the
   // home feels branded instead of empty.
-  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                  const char* subtitle = nullptr) const override;
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
+                  bool backButton = true) const override;
 
   // Two-column tile grid (icon top, label bottom) instead of the inherited
   // vertical list. Gives the home screen a more visually distinct shape.

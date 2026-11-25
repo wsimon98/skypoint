@@ -68,9 +68,10 @@ void SkyPointTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, con
   fillBatteryIcon(renderer, iconRect, percentage);
 }
 
-void SkyPointTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void SkyPointTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                               const bool backButton) const {
   if (title != nullptr) {
-    Lyra3CoversTheme::drawHeader(renderer, rect, title, subtitle);
+    Lyra3CoversTheme::drawHeader(renderer, rect, title, subtitle, backButton);
     return;
   }
 

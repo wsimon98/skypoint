@@ -227,7 +227,8 @@ bool timeString(char* buf, size_t bufSize) {
   // X3: hardware RTC, same source/format as the status-bar clock.
   if (halClock.isAvailable()) {
     if (!SETTINGS.clockHasBeenSynced) return false;
-    return halClock.formatTime(buf, bufSize, SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1);
+    // HalClock applies the timezone/DST chosen in Settings (CrossPoint 1.6.5+).
+    return halClock.formatTime(buf, bufSize, SETTINGS.clockFormat == 1);
   }
 
   // X4: system clock + IP-derived UTC offset. Without a known offset the
