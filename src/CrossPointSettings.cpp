@@ -179,6 +179,13 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  // SkyPoint: dark mode was stored as "readerDarkMode" before it moved onto
+  // CrossPoint's screenInverted. Carry the old value over once.
+  if (doc["screenInverted"].isNull() && !doc["readerDarkMode"].isNull()) {
+    screenInverted = clamp(doc["readerDarkMode"] | (uint8_t)0, (uint8_t)2, (uint8_t)0);
+    needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);

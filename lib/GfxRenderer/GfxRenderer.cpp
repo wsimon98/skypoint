@@ -1708,11 +1708,6 @@ void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   refreshMode = applyPromotedRefresh(refreshMode);
-  if (darkMode) {
-    // SkyPoint dark mode: flip the framebuffer in place right before flushing.
-    // Each render() begins with clearScreen() so the invert does not stack.
-    invertScreen();
-  }
   display.displayBuffer(refreshMode, fadingFix);
 }
 

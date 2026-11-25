@@ -282,7 +282,7 @@ void EpubReaderActivity::openReaderMenu() {
                            if (epub) {
                              const auto override = static_cast<ReaderDarkMode::BookOverride>(menu.darkOverride);
                              ReaderDarkMode::saveBookOverride(epub->getCachePath(), override);
-                             renderer.setDarkMode(ReaderDarkMode::effective(override));
+                             ReaderDarkMode::setActiveBookOverride(override);
                            }
                            if (!result.isCancelled) {
                              onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
@@ -2408,7 +2408,7 @@ void EpubReaderActivity::activateMoreRow(int row) {
       if (!epub) return;
       const auto next = ReaderDarkMode::cycleNext(ReaderDarkMode::loadBookOverride(epub->getCachePath()));
       ReaderDarkMode::saveBookOverride(epub->getCachePath(), next);
-      renderer.setDarkMode(ReaderDarkMode::effective(next));
+      ReaderDarkMode::setActiveBookOverride(next);
       discardOverlayPage();
       requestUpdate();
       return;

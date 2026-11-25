@@ -202,6 +202,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepGlance = 1;
   // Night mode: inverted output polarity, applied to every activity per
   // render by ActivityManager. The sleep screen opts out itself.
+  // SkyPoint shows this as "Dark Mode"; per-book overrides (ReaderDarkMode.h) and
+  // folder profiles layer on top of it.
   uint8_t screenInverted = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
@@ -329,9 +331,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint16_t keyboardLayouts = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
-  // SkyPoint reader dark mode: when enabled, the reader inverts each page before display.
-  // Per-book overrides live on the SD card alongside progress.bin — see ReaderDarkMode.h.
-  uint8_t readerDarkMode = 0;
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;

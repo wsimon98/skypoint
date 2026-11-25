@@ -71,8 +71,8 @@ void ReaderActivity::onEnter() {
     return;
   }
 
-  // SkyPoint dark mode: the per-book override falls back to the system setting.
-  renderer.setDarkMode(ReaderDarkMode::effectiveForBook(getBookCachePath()));
+  // SkyPoint dark mode: this book's override (falls back to the system setting).
+  ReaderDarkMode::setActiveBookOverride(ReaderDarkMode::loadBookOverride(getBookCachePath()));
 
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
@@ -84,10 +84,10 @@ void ReaderActivity::onExit() {
   Activity::onExit();
 
   // SkyPoint: restore SETTINGS to pre-folder-profile values, count today toward the
-  // reading streak shown on the sleep screen, and leave dark mode to the next screen.
+  // reading streak shown on the sleep screen, and hand dark mode back to the system setting.
   FolderProfile::restore();
   SleepGlance::recordReadingDay();
-  renderer.setDarkMode(false);
+  ReaderDarkMode::setActiveBookOverride(ReaderDarkMode::USE_SYSTEM);
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   APP_STATE.readerActivityLoadCount = 0;

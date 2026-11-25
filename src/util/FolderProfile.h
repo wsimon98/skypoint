@@ -146,7 +146,7 @@ inline Profile snapshotFromSettings() {
   p.lineSpacing = s.lineSpacing;
   p.paragraphAlign = s.paragraphAlignment;
   p.screenMargin = s.screenMargin;
-  p.readerDarkMode = s.readerDarkMode;
+  p.readerDarkMode = s.screenInverted;
   p.hyphenationEnabled = s.hyphenationEnabled;
   p.focusReadingEnabled = s.focusReadingEnabled;
   return p;
@@ -218,8 +218,8 @@ inline bool apply(const std::string& bookPath) {
     s.screenMargin = overlay.screenMargin;
   }
   if (overlay.mask & MASK_READER_DARK_MODE) {
-    state.baseline.readerDarkMode = s.readerDarkMode;
-    s.readerDarkMode = overlay.readerDarkMode;
+    state.baseline.readerDarkMode = s.screenInverted;
+    s.screenInverted = overlay.readerDarkMode;
   }
   if (overlay.mask & MASK_HYPHENATION) {
     state.baseline.hyphenationEnabled = s.hyphenationEnabled;
@@ -245,7 +245,7 @@ inline void restore() {
   if (mask & MASK_LINE_SPACING) s.lineSpacing = state.baseline.lineSpacing;
   if (mask & MASK_PARAGRAPH_ALIGN) s.paragraphAlignment = state.baseline.paragraphAlign;
   if (mask & MASK_SCREEN_MARGIN) s.screenMargin = state.baseline.screenMargin;
-  if (mask & MASK_READER_DARK_MODE) s.readerDarkMode = state.baseline.readerDarkMode;
+  if (mask & MASK_READER_DARK_MODE) s.screenInverted = state.baseline.readerDarkMode;
   if (mask & MASK_HYPHENATION) s.hyphenationEnabled = state.baseline.hyphenationEnabled;
   if (mask & MASK_FOCUS_READING) s.focusReadingEnabled = state.baseline.focusReadingEnabled;
   state.active = false;

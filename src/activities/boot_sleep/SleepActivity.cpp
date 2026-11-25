@@ -609,12 +609,6 @@ void SleepActivity::renderCustomSleepScreen() const {
 // sequence, used once for the sleep image. It never runs the multi-flash GC
 // waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
 void SleepActivity::renderDefaultSleepScreen() const {
-  // Sleep manages its own invert via SETTINGS.sleepScreen, so disable any inherited
-  // renderer dark-mode for the duration of this render to avoid double-inverting
-  // when the user has reader dark-mode enabled on home / in a book.
-  const bool wasDark = renderer.isDarkMode();
-  renderer.setDarkMode(false);
-
   // Pick the SkyPoint wolf that matches this device's PANEL-NATIVE dimensions.
   // Bitmaps are encoded landscape (rotated 90° CCW from the upright source PNG)
   // so they can be drawn straight to the framebuffer at panel native coords.
@@ -666,10 +660,6 @@ void SleepActivity::renderDefaultSleepScreen() const {
   }
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-
-  // Restore for whatever activity resumes after we wake — keeps home/reader dark
-  // mode intact across sleep cycles.
-  renderer.setDarkMode(wasDark);
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground,

@@ -12,6 +12,11 @@
 // "darkmode.bin" inside the same per-book cache directory that already holds
 // progress.bin. A new file (rather than extending progress.bin) keeps existing
 // devices' progress files readable with no migration.
+//
+// The system setting is CrossPoint's screenInverted (shown as "Dark Mode").
+// While a book is open its override is held in activeBookOverride(), and
+// ActivityManager resolves effectiveNow() into the display polarity before
+// every render, so images keep their original polarity (GfxRenderer).
 namespace ReaderDarkMode {
 
 enum BookOverride : uint8_t {
@@ -60,13 +65,24 @@ inline bool effective(BookOverride override) {
       return false;
     case USE_SYSTEM:
     default:
-      return CrossPointSettings::getInstance().readerDarkMode != 0;
+      return CrossPointSettings::getInstance().screenInverted != 0;
   }
 }
 
 inline bool effectiveForBook(const std::string& bookCachePath) {
   return effective(loadBookOverride(bookCachePath));
 }
+
+// Override of the book currently open in the reader; USE_SYSTEM when no book is open.
+inline BookOverride& activeBookOverride() {
+  static BookOverride active = USE_SYSTEM;
+  return active;
+}
+
+inline void setActiveBookOverride(BookOverride override) { activeBookOverride() = override; }
+
+// Effective dark mode for whatever is on screen right now.
+inline bool effectiveNow() { return effective(activeBookOverride()); }
 
 inline BookOverride cycleNext(BookOverride current) {
   return static_cast<BookOverride>((static_cast<uint8_t>(current) + 1) % BOOK_OVERRIDE_COUNT);
