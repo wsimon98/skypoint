@@ -97,11 +97,24 @@ bool jsonString(const char* from, const char* key, char* out, size_t outSize) {
   return *p == '"';
 }
 
+// Both API responses are a few hundred bytes. CrossPoint 2.0 dropped the
+// fetch-into-std::string overload, so collect the streamed body here with a
+// hard cap instead of letting an unexpected response grow without bound.
+constexpr size_t MAX_BODY_BYTES = 4096;
+bool fetchSmallBody(const std::string& url, std::string& body) {
+  body.clear();
+  return HttpDownloader::fetchUrl(url, [&body](const uint8_t* data, size_t len) {
+    if (body.size() + len > MAX_BODY_BYTES) return false;
+    body.append(reinterpret_cast<const char*>(data), len);
+    return true;
+  });
+}
+
 bool fetchGeo() {
   std::string body;
   // ip-api.com resolves the device's own public IP — no configuration, works
   // wherever the user is. `offset` is the UTC offset in seconds incl. DST.
-  if (!HttpDownloader::fetchUrl("http://ip-api.com/json/?fields=status,countryCode,lat,lon,offset", body)) {
+  if (!fetchSmallBody("http://ip-api.com/json/?fields=status,countryCode,lat,lon,offset", body)) {
     LOG_DBG(TAG, "geo fetch failed");
     return false;
   }
@@ -138,7 +151,7 @@ bool fetchWeather() {
            "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code",
            cache.lat, cache.lon);
   std::string body;
-  if (!HttpDownloader::fetchUrl(url, body)) {
+  if (!fetchSmallBody(url, body)) {
     LOG_DBG(TAG, "weather fetch failed");
     return false;
   }

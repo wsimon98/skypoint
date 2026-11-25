@@ -27,7 +27,7 @@ void FolderActionsActivity::onEnter() {
 }
 
 void FolderActionsActivity::loop() {
-  buttonNavigator.onNextRelease([this] {
+  buttonNavigator.onRelease(ButtonNavigator::getNextButtons(), [this] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, ITEM_COUNT);
     requestUpdate();
   });

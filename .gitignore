@@ -6,6 +6,7 @@ build
 flasher/builds/
 flake.*
 .zed
+sdkconfig.x4pro
 *.generated.h
 .history/
 .idea
